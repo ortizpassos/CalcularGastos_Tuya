@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Detalhes da kitinete</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="nomes.js" defer></script>
+  <script src="detalhes.js" defer></script>
+  <script src="banhos.js" defer></script>
+</head>
+<body class="bg-light">
+  <main class="container py-4" style="max-width:960px">
+    <nav class="d-flex flex-wrap gap-2 mb-4" aria-label="Atalhos">
+      <a id="voltar" href="index.html" class="btn btn-outline-secondary">Voltar</a>
+      <a href="configuracoes.html" class="btn btn-outline-primary">Configurações</a>
+    </nav>
+    <h1 id="nome">Detalhes do morador</h1>
+    <p id="kitinete" class="text-secondary"></p>
+    <nav class="d-flex gap-2 mb-4" aria-label="Tipo de consumo">
+      <a id="linkLuz" class="btn btn-outline-primary">Luz</a>
+      <a id="linkAgua" class="btn btn-outline-primary">Água</a>
+    </nav>
+    <section id="monitorBanhos" class="card p-3 mb-4" hidden>
+      <h2 class="h4">Monitor de banhos prováveis</h2>
+      <p>Detecta corrente acima do limite. Outros aparelhos podem disparar a detecção: o consumo estimado é do circuito inteiro durante o período, não exclusivamente do chuveiro.</p>
+      <p class="small text-secondary">O backend precisa permanecer ligado. Consultas aproximadamente a cada 30 segundos, sujeitas ao atraso de atualização da Tuya. Falhas interrompem a ocorrência; o tempo sem dados não é contado.</p>
+      <form id="formMonitor" class="mb-3">
+        <fieldset id="camposMonitor" disabled>
+          <div class="form-check mb-3"><input id="monitorAtivo" type="checkbox" class="form-check-input"><label for="monitorAtivo" class="form-check-label">Ativar monitoramento desta kitinete</label></div>
+          <label for="limiteBanho" class="form-label">Limite de corrente (A)</label>
+          <input id="limiteBanho" type="number" min="0.1" max="1000" step="any" value="16" required class="form-control mb-3">
+          <details class="mb-3"><summary>Campos de medição Tuya</summary>
+            <p class="small">A escala e a unidade são lidas da especificação do dispositivo. Use divisores apenas se souber a conversão: valor bruto ÷ divisor = amperes ou watts. Se os campos não estiverem disponíveis, o monitor informará o problema.</p>
+            <div class="row g-2">
+              <div class="col-sm-6"><label for="dpCorrente">DP de corrente</label><input id="dpCorrente" class="form-control" value="cur_current" required pattern="[A-Za-z0-9_-]{1,80}"></div>
+              <div class="col-sm-6"><label for="divisorCorrente">Divisor para amperes (opcional)</label><input id="divisorCorrente" class="form-control" type="number" min="0.000001" step="any"></div>
+              <div class="col-sm-6"><label for="dpPotencia">DP de potência ativa</label><input id="dpPotencia" class="form-control" value="cur_power" required pattern="[A-Za-z0-9_-]{1,80}"></div>
+              <div class="col-sm-6"><label for="divisorPotencia">Divisor para watts (opcional)</label><input id="divisorPotencia" class="form-control" type="number" min="0.000001" step="any"></div>
+            </div>
+          </details>
+          <button class="btn btn-primary" type="submit">Salvar monitoramento</button>
+        </fieldset>
+      </form>
+      <p id="monitorMensagem" role="status"></p>
+      <div id="monitorAgora" class="alert alert-secondary" role="status">Carregando monitor...</div>
+      <h3 class="h5">Relatório de banhos</h3>
+      <p class="small">Inclui ocorrências encerradas ou interrompidas cujo início está no período selecionado. Energia calculada pela integração da potência ativa entre amostras. Sem potência disponível, o consumo aparece como parcial ou indisponível.</p>
+      <form id="formRelatorio" class="row g-2 align-items-end mb-3">
+        <div class="col-sm-4"><label for="banhosInicio">De</label><input id="banhosInicio" type="date" required class="form-control"></div>
+        <div class="col-sm-4"><label for="banhosFim">Até (inclusive)</label><input id="banhosFim" type="date" required class="form-control"></div>
+        <div class="col-sm-4"><button type="submit" class="btn btn-outline-primary">Gerar relatório</button></div>
+      </form>
+      <p id="relatorioStatus" role="status"></p>
+      <div id="totaisBanhos" class="mb-3"></div>
+      <button id="exportarBanhos" type="button" class="btn btn-outline-secondary mb-3" disabled>Exportar relatório CSV</button>
+      <div class="table-responsive"><table class="table table-striped">
+        <thead><tr><th>Kitinete / morador</th><th>Início</th><th>Fim</th><th>Duração observada</th><th>Consumo estimado</th><th>Custo estimado</th><th>Pico (A)</th><th>Limite (A)</th><th>Estado</th></tr></thead>
+        <tbody id="linhasBanhos"></tbody>
+      </table></div>
+      <h3 class="h5 mt-4">Períodos de maior e menor consumo no dia</h3>
+      <p class="small">Comparação por hora, apenas com pelo menos 90% do período monitorado e duas horas comparáveis. Horas sem dados não representam consumo zero. A coleta começa com o monitor ativo; não há recuperação retroativa.</p>
+      <form id="formConsumoDia" class="d-flex flex-wrap gap-2 align-items-end mb-3">
+        <div><label for="diaConsumo">Dia</label><input id="diaConsumo" type="date" required class="form-control"></div>
+        <button class="btn btn-outline-primary" type="submit">Consultar dia</button>
+      </form>
+      <p id="diaStatus" role="status"></p>
+      <div class="table-responsive"><table class="table table-striped">
+        <thead><tr><th>Horário</th><th>Consumo estimado</th><th>Custo estimado</th><th>Tempo com dados</th><th>Comparação</th></tr></thead>
+        <tbody id="horasConsumo"></tbody>
+      </table></div>
+    </section>
+    <div id="status" role="status" class="alert alert-info">Carregando detalhes...</div>
+    <section id="conteudo" hidden>
+      <h2 class="h4">Último registro</h2>
+      <dl class="row bg-white rounded p-3 mx-0">
+        <dt class="col-sm-6">Consumo</dt><dd id="consumo" class="col-sm-6">—</dd>
+        <dt class="col-sm-6">Valor individual</dt><dd id="valor" class="col-sm-6">—</dd>
+        <dt class="col-sm-6">Data</dt><dd id="data" class="col-sm-6">—</dd>
+      </dl>
+      <p id="observacao" class="text-secondary"></p>
+      <h2 class="h4">Histórico individual</h2>
+      <p class="small text-secondary">Registros desta kitinete presentes nos últimos 100 registros retornados pelo sistema. Os nomes exibidos acompanham a configuração atual.</p>
+      <div class="table-responsive">
+        <table class="table table-striped bg-white">
+          <thead><tr><th>Data</th><th id="unidade">Consumo</th><th>Valor individual</th></tr></thead>
+          <tbody id="historico"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

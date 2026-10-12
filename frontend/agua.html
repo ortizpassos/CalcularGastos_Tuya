@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
+  <style>
+    input:focus::placeholder {
+      color: #000 !important;
+      opacity: 1;
+    }
+    ::placeholder {
+      color: #fff !important;
+      opacity: 1;
+    }
+    :-ms-input-placeholder { color: #fff !important; }
+    ::-ms-input-placeholder { color: #fff !important; }
+    body {
+      background: linear-gradient(to bottom right, #1e1e1e, #121212);
+      color: #f8f9fa;
+      min-height: 100vh;
+    }
+    .container {
+      max-width: 800px;
+      padding: 1rem;
+    }
+    .card {
+      background: rgba(30,30,30,0.97);
+      color: #f8f9fa;
+      border-radius: 18px;
+      box-shadow: 0 0 24px #0008;
+      border: none;
+    }
+    .card-title {
+      font-size: 2rem;
+      color: #0d6efd;
+      letter-spacing: 1px;
+    }
+    .btn, .btn-lg, .btn-sm {
+      border-radius: 12px !important;
+      font-size: 1.1rem;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .btn:hover {
+      transform: scale(1.04);
+      box-shadow: 0 0 10px #0d6efd44;
+    }
+    .btn-outline-dark, .btn-outline-primary, .btn-outline-secondary {
+      color: #f8f9fa;
+      border-color: #444;
+    }
+    .btn-outline-dark:hover {
+      background: #222;
+      color: #fff;
+    }
+    .result-table th {
+      background-color: #0d6efd;
+      color: white;
+    }
+    .form-control {
+      border-radius: 10px;
+      background: #232323;
+      color: #f8f9fa;
+      border: 1px solid #444;
+    }
+    .form-control:focus {
+      border-color: #0d6efd;
+      box-shadow: 0 0 0 0.2rem #0d6efd33;
+    }
+    .alert {
+      border-radius: 10px;
+    }
+    @media (max-width: 576px) {
+      .card-title {
+        font-size: 1.4rem;
+      }
+      .btn, .btn-lg, .btn-sm {
+        font-size: 1rem;
+        padding: 12px;
+      }
+    }
+  </style>
+  <script src="nomes.js"></script>
+  <link rel="stylesheet" href="nomes.css">
+</head>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+
+<body>
+  <nav aria-label="Atalhos" style="width:100%;text-align:right;padding:12px 20px"><a href="configuracoes.html" class="btn btn-outline-primary">Configura&#231;&#245;es</a></nav>
+<script>
+  if (!localStorage.getItem('token')) {
+    window.location.href = 'login.html';
+  }
+</script>
+
+  <div class="container text-end mt-3">
+    <button id="btnSair" class="btn btn-danger btn-sm">
+      <i class="bi bi-box-arrow-right"></i> Sair
+    </button>
+  </div>
+
+
+    <!-- Container principal centralizado com largura máxima e margem reduzida -->
+    <div class="container mx-auto mt-0" style="max-width: 800px;">
+    <div class="d-flex flex-column gap-3 align-items-center">
+        <!-- Botão VOLTAR verde -->
+        <a href="index.html" class="btn btn-outline-dark btn-lg w-100" style="color: #28a745; border-color: #28a745;">
+        <i class="bi bi-arrow-left"></i> Voltar
+        </a>
+
+        <!-- Botão CALCULAR LUZ laranja -->
+        <a href="luz.html" class="btn btn-outline-dark btn-lg w-100" style="color: #fd7e14; border-color: #fd7e14;">
+        <i class="bi bi-lightbulb"></i> Calcular Luz
+        </a>
+    </div>
+    </div>
+
+    
+   
+  <div class="container my-0">
+    <div class="card shadow-sm">
+        <h1 class="card-title text-primary mb-4 text-center">
+        <i class="bi bi-droplet-half"></i> Calculadora de Fatura de Água
+    </h1>
+
+
+      <div class="card-body">
+
+        <!-- 1. DADOS DA FATURA -->
+        <div class="mb-4">
+          <h5 class="mb-3">Dados da Fatura</h5>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="valorTotalFatura" class="form-label">Valor Total da Fatura (R$)</label>
+              <input type="number" class="form-control" id="valorTotalFatura" placeholder="Ex: 150.50" />
+              <div class="invalid-feedback">Campo inválido.</div>
+
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="consumoTotalM3" class="form-label">Consumo Total (m³)</label>
+              <input type="number" class="form-control" id="consumoTotalM3" placeholder="Ex: 25" />
+              <div class="invalid-feedback">Campo inválido.</div>
+
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. LEITURAS ANTERIORES -->
+        <div id="blocoLeituraAnteriorInicial" class="alert alert-warning">
+          <h5 class="alert-heading"><i class="bi bi-exclamation-triangle-fill"></i> Primeiro Uso Detectado!</h5>
+          <p>Por favor, insira as leituras anteriores para o primeiro cálculo.</p>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label id="labelLeituraAnterior1" for="leituraAnteriorKarinaInicial" class="form-label">Leitura anterior (m³)</label>
+              <input type="number" class="form-control" id="leituraAnteriorKarinaInicial" />
+              <div class="invalid-feedback">Campo inválido.</div>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label id="labelLeituraAnterior2" for="leituraAnteriorLuizaInicial" class="form-label">Leitura anterior (m³)</label>
+              <input type="number" class="form-control" id="leituraAnteriorLuizaInicial" />
+              <div class="invalid-feedback">Campo inválido.</div>
+            </div>
+          </div>
+        </div>
+
+        <div id="blocoLeituraAnteriorSalva" class="d-none">
+          <p><strong>Leituras anteriores salvas:</strong></p>
+          <ul>
+            <li><a id="labelLeituraSalva1" href="detalhes.html?kitinete=maior&amp;tipo=agua">Pessoa 1</a>: <strong id="leituraAnteriorKarinaSalva" class="text-primary"></strong> m³</li>
+            <li><a id="labelLeituraSalva2" href="detalhes.html?kitinete=menor&amp;tipo=agua">Pessoa 2</a>: <strong id="leituraAnteriorLuizaSalva" class="text-primary"></strong> m³</li>
+          </ul>
+          <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#senhaModal">
+            Alterar Leituras Anteriores
+          </button>
+          <hr />
+        </div>
+
+        
+        <!-- 3. LEITURAS ATUAIS -->
+        <div class="mb-4">
+          <h5 class="mb-3">Leituras Atuais</h5>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label id="labelLeituraAtual1" for="leituraAtualKarina" class="form-label"><strong>Leitura atual (m³)</strong></label>
+              <input type="number" class="form-control" id="leituraAtualKarina" />
+              <div class="invalid-feedback">Campo inválido.</div>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label id="labelLeituraAtual2" for="leituraAtualLuiza" class="form-label"><strong>Leitura atual (m³)</strong></label>
+              <input type="number" class="form-control" id="leituraAtualLuiza" />
+              <div class="invalid-feedback">Campo inválido.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="d-grid gap-2 d-md-flex justify-content-md-end mb-4">
+          <button class="btn btn-success" onclick="calcularFatura()">
+          <i class="bi bi-calculator"></i> Calcular Divisão
+          </button>
+          <button class="btn btn-warning" onclick="exportarPDF()">
+          <i class="bi bi-file-earmark-pdf-fill"></i> Exportar Histórico PDF
+          </button>
+
+        </div>
+
+        <div id="alertaErro" class="alert alert-danger d-none"></div>
+
+        <!-- 4. RESULTADOS -->
+        <div id="blocoResultados" class="mt-4">
+          <h4 class="text-success"><i class="bi bi-check-circle-fill"></i> Resultado</h4>
+          <p><strong>Valor Total da Fatura:</strong> R$ <span id="valorTotal"></span></p>
+          <p><strong>Consumo Total:</strong> <span id="consumoTotal"></span> m³</p>
+          <p><strong>Preço médio por m³:</strong> R$ <span id="valorPorM3"></span></p>
+
+          <table class="table table-bordered mt-3 result-table text-center">
+            <thead>
+              <tr>
+                <th>Nome</th>
+                <th>Consumo (m³)</th>
+                <th>Valor a pagar (R$)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><i class="bi bi-person-circle text-primary"></i> <a id="labelNome1" href="detalhes.html?kitinete=maior&amp;tipo=agua">Pessoa 1</a></td>
+                <td id="consumoKarina"></td>
+                <td id="valorKarina"></td>
+              </tr>
+              <tr>
+                <td><i class="bi bi-person-circle text-primary"></i> <a id="labelNome2" href="detalhes.html?kitinete=menor&amp;tipo=agua">Pessoa 2</a></td>
+                <td id="consumoLuiza"></td>
+                <td id="valorLuiza"></td>
+              </tr>
+              <tr>
+                <td><i class="bi bi-person-circle text-primary"></i> <a id="labelNome3" href="detalhes.html?kitinete=superior&amp;tipo=agua">Pessoa 3</a></td>
+                <td id="consumoTatiana"></td>
+                <td id="valorTatiana"></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!--GRAFICO-->
+
+        <div class="mt-5">
+        <h5 class="text-center">Gráfico de Consumo (m³)</h5>
+        <canvas id="graficoConsumo" height="100"></canvas>
+        </div>
+
+
+        <!--Tabela Historico-->
+
+    
+
+
+
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de Senha -->
+  <div class="modal fade" id="senhaModal" tabindex="-1" aria-labelledby="senhaModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="senhaModalLabel">Acesso Restrito</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p>Para alterar as leituras anteriores, por favor, insira a senha.</p>
+          <input type="password" class="form-control" id="senhaInput" placeholder="Senha" />
+          <div class="invalid-feedback">Senha incorreta.</div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-primary" onclick="verificarSenha()">Confirmar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bootstrap JS Bundle -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <script>
+  // Senha mestra removida. Agora usa senha do usuário cadastrado.
+
+let graficoConsumo = null;
+const blocoInicial = document.getElementById('blocoLeituraAnteriorInicial');
+const blocoSalvo = document.getElementById('blocoLeituraAnteriorSalva');
+const senhaInput = document.getElementById('senhaInput');
+const modalElement = document.getElementById('senhaModal');
+const senhaModal = new bootstrap.Modal(modalElement);
+
+const API_ROOT = 'http://localhost:3000/api';
+const API_BASE = `${API_ROOT}/agua`;
+
+
+async function carregarLeituras() {
+  try {
+    const token = localStorage.getItem('token');
+    const respLeituras = await fetch(`${API_BASE}/leituras`, {
+      headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+    });
+    const leituras = await respLeituras.json();
+    if (leituras.karina !== undefined && leituras.luiza !== undefined) {
+      document.getElementById('leituraAnteriorKarinaSalva').textContent = leituras.karina;
+      document.getElementById('leituraAnteriorLuizaSalva').textContent = leituras.luiza;
+      blocoInicial.classList.add('d-none');
+      blocoSalvo.classList.remove('d-none');
+    } else {
+      blocoInicial.classList.remove('d-none');
+      blocoSalvo.classList.add('d-none');
+    }
+  } catch {
+    blocoInicial.classList.remove('d-none');
+    blocoSalvo.classList.add('d-none');
+  }
+
+}
+
+window.onload = carregarLeituras;
+window.addEventListener('focus', carregarLeituras);
+
+function getLeituraAnterior() {
+  let karina, luiza;
+  if (blocoInicial.classList.contains('d-none')) {
+    karina = parseFloat(document.getElementById('leituraAnteriorKarinaSalva').textContent);
+  luiza = parseFloat(document.getElementById('leituraAnteriorLuizaSalva').textContent);
+  } else {
+    karina = parseFloat(document.getElementById('leituraAnteriorKarinaInicial').value);
+  luiza = parseFloat(document.getElementById('leituraAnteriorLuizaInicial').value);
+  }
+  return { karina, luiza };
+}
+
+function validarCampos(leiturasAnteriores, leiturasAtuais, fatura) {
+  const alertaErro = document.getElementById('alertaErro');
+  let mensagensErro = [];
+
+  function marcarCampo(id, valido) {
+    const campo = document.getElementById(id);
+    if (!campo) return;
+    campo.classList.remove('is-valid', 'is-invalid');
+    campo.classList.add(valido ? 'is-valid' : 'is-invalid');
+  }
+
+  // Valida fatura
+  const faturaValida = !isNaN(fatura.valorTotal) && fatura.valorTotal > 0;
+  const consumoValido = !isNaN(fatura.consumoTotal) && fatura.consumoTotal > 0;
+  marcarCampo('valorTotalFatura', faturaValida);
+  marcarCampo('consumoTotalM3', consumoValido);
+  if (!faturaValida) mensagensErro.push('Valor total da fatura inválido.');
+  if (!consumoValido) mensagensErro.push('Consumo total em M³ inválido.');
+
+  // Valida leituras anteriores
+  const antKarina = !isNaN(leiturasAnteriores.karina);
+  const antLuiza = !isNaN(leiturasAnteriores.luiza);
+  marcarCampo('leituraAnteriorKarinaInicial', antKarina);
+  marcarCampo('leituraAnteriorLuizaInicial', antLuiza);
+  if (!antKarina) mensagensErro.push('Leitura anterior de Karina inválida.');
+  if (!antLuiza) mensagensErro.push('Leitura anterior de Luiza inválida.');
+
+  // Valida leituras atuais
+  const atualKarina = !isNaN(leiturasAtuais.karina) && leiturasAtuais.karina >= leiturasAnteriores.karina;
+  const atualLuiza = !isNaN(leiturasAtuais.luiza) && leiturasAtuais.luiza >= leiturasAnteriores.luiza;
+  marcarCampo('leituraAtualKarina', atualKarina);
+  marcarCampo('leituraAtualLuiza', atualLuiza);
+  if (!atualKarina) mensagensErro.push('Leitura atual de Karina inválida ou menor que a anterior.');
+  if (!atualLuiza) mensagensErro.push('Leitura atual de Luiza inválida ou menor que a anterior.');
+
+  if (mensagensErro.length > 0) {
+    alertaErro.textContent = mensagensErro.join('\n');
+    alertaErro.style.whiteSpace = 'pre-line';
+    alertaErro.classList.remove('d-none');
+    document.getElementById('blocoResultados').style.display = 'none';
+    return false;
+  }
+
+  alertaErro.classList.add('d-none');
+  return true;
+}
+
+async function calcularFatura() {
+  const token = localStorage.getItem('token');
+  const leiturasAnteriores = getLeituraAnterior();
+  const leiturasAtuais = {
+  karina: parseFloat(document.getElementById('leituraAtualKarina').value),
+  luiza: parseFloat(document.getElementById('leituraAtualLuiza').value)
+  };
+  const fatura = {
+    valorTotal: parseFloat(document.getElementById('valorTotalFatura').value),
+    consumoTotal: parseFloat(document.getElementById('consumoTotalM3').value)
+  };
+
+  if (!validarCampos(leiturasAnteriores, leiturasAtuais, fatura)) {
+    return;
+  }
+
+  const valorPorM3 = fatura.valorTotal / fatura.consumoTotal;
+  const consumoKarina = leiturasAtuais.karina - leiturasAnteriores.karina;
+  const consumoLuiza = leiturasAtuais.luiza - leiturasAnteriores.luiza;
+  const consumoTatiana = fatura.consumoTotal - (consumoKarina + consumoLuiza);
+
+  const valorKarina = consumoKarina *   valorPorM3;
+  const valorLuiza = consumoLuiza *     valorPorM3;
+  const valorTatiana = consumoTatiana * valorPorM3;
+
+  document.getElementById('consumoKarina').textContent = consumoKarina.toFixed(2);
+  document.getElementById('consumoLuiza').textContent = consumoLuiza.toFixed(2);
+  document.getElementById('consumoTatiana').textContent = consumoTatiana.toFixed(2);
+  document.getElementById('consumoTotal').textContent = fatura.consumoTotal.toFixed(2);
+
+  document.getElementById('valorKarina').textContent = valorKarina.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  document.getElementById('valorLuiza').textContent = valorLuiza.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  document.getElementById('valorTatiana').textContent = valorTatiana.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  document.getElementById('valorTotal').textContent = fatura.valorTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  document.getElementById('valorPorM3').textContent = valorPorM3.toFixed(4);
+
+  // Salvar leituras anteriores via API
+  try {
+    const payload = {
+      karina: leiturasAtuais.karina,
+      luiza: leiturasAtuais.luiza,
+      data: new Date().toLocaleString('pt-BR')
+    };
+    await fetch(`${API_BASE}/leituras`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+      },
+      body: JSON.stringify(payload)
+    });
+
+    document.getElementById('leituraAnteriorKarinaSalva').textContent = leiturasAtuais.karina;
+    document.getElementById('leituraAnteriorLuizaSalva').textContent = leiturasAtuais.luiza;
+    blocoInicial.classList.add('d-none');
+    blocoSalvo.classList.remove('d-none');
+  } catch {
+    alert('Erro ao salvar leituras anteriores no servidor.');
+  }
+
+  document.getElementById('blocoResultados').style.display = 'block';
+
+  // Salvar histórico para cada pessoa via API
+  try {
+    const pessoas = [
+      { nome: 'Karina', consumo: consumoKarina, valor: valorKarina },
+  { nome: 'Luiza', consumo: consumoLuiza, valor: valorLuiza },
+      { nome: 'Tatiana', consumo: consumoTatiana, valor: valorTatiana }
+    ];
+
+    for (const p of pessoas) {
+      const payload = {
+        data: new Date().toLocaleString('pt-BR'),
+        nome: p.nome,
+        consumo: p.consumo,
+        valor: p.valor,
+        consumoTotal: fatura.consumoTotal,
+        valorTotal: fatura.valorTotal
+      };
+      console.log('Enviando histórico:', payload);
+      const resp = await fetch(`${API_BASE}/historico`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+        },
+        body: JSON.stringify(payload)
+      });
+      if (!resp.ok) {
+        const erro = await resp.json().catch(() => ({}));
+        console.error('Erro ao salvar histórico:', erro);
+        alert('Erro ao salvar histórico: ' + (erro.erro || resp.status));
+      }
+    }
+
+
+  } catch (err) {
+    alert('Erro ao salvar histórico no servidor.');
+    console.error(err);
+  }
+
+  desenharGrafico(consumoKarina, consumoLuiza, consumoTatiana);
+}
+
+function desenharGrafico(karina, luiza, tatiana) {
+  const ctx = document.getElementById('graficoConsumo').getContext('2d');
+  const nomes = getNomesDinamicos();
+  if (graficoConsumo) {
+    graficoConsumo.destroy();
+  }
+  graficoConsumo = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: nomes,
+      datasets: [{
+        label: 'Consumo (m³)',
+        data: [karina, luiza, tatiana],
+        backgroundColor: ['#0c6cfc', '#1c8454', '#ffc107'],
+        borderColor: '#dee2e6',
+        borderWidth: 1,
+        borderRadius: 6
+      }]
+    },
+    options: {
+      responsive: true,
+      animation: {
+        duration: 1000,
+        easing: 'easeOutBounce'
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          title: {
+            display: true,
+            text: 'Consumo (m³)'
+          },
+          ticks: {
+            precision: 0
+          },
+          grid: {
+            color: '#dee2e6'
+          }
+        },
+        x: {
+          grid: {
+            display: false
+          }
+        }
+      },
+      plugins: {
+        legend: {
+          display: false
+        },
+        tooltip: {
+          callbacks: {
+            label: function (context) {
+              const valor = context.parsed.y;
+              return `${context.label}: ${valor.toFixed(2)} m³`;
+            }
+          }
+        }
+      }
+    }
+  });
+}
+// Função para obter nomes dinâmicos do localStorage ou padrão
+
+
+// Atualiza todos os labels de nomes na interface
+function atualizarNomesInterface() {
+  const nomes = getNomesDinamicos();
+  // Labels dos campos de leitura
+  const labelLeituraAnterior1 = document.getElementById('labelLeituraAnterior1');
+  const labelLeituraAnterior2 = document.getElementById('labelLeituraAnterior2');
+  const labelLeituraSalva1 = document.getElementById('labelLeituraSalva1');
+  const labelLeituraSalva2 = document.getElementById('labelLeituraSalva2');
+  const labelLeituraAtual1 = document.getElementById('labelLeituraAtual1');
+  const labelLeituraAtual2 = document.getElementById('labelLeituraAtual2');
+  const labelNome1 = document.getElementById('labelNome1');
+  const labelNome2 = document.getElementById('labelNome2');
+  const labelNome3 = document.getElementById('labelNome3');
+  if (labelLeituraAnterior1) labelLeituraAnterior1.textContent = `Leitura anterior ${nomes[0]} (m³)`;
+  if (labelLeituraAnterior2) labelLeituraAnterior2.textContent = `Leitura anterior ${nomes[1]} (m³)`;
+  if (labelLeituraSalva1) labelLeituraSalva1.textContent = nomes[0];
+  if (labelLeituraSalva2) labelLeituraSalva2.textContent = nomes[1];
+  if (labelLeituraAtual1) labelLeituraAtual1.textContent = `Leitura atual ${nomes[0]} (m³)`;
+  if (labelLeituraAtual2) labelLeituraAtual2.textContent = `Leitura atual ${nomes[1]} (m³)`;
+  if (labelNome1) labelNome1.textContent = nomes[0];
+  if (labelNome2) labelNome2.textContent = nomes[1];
+  if (labelNome3) labelNome3.textContent = nomes[2];
+}
+
+// Atualizar nomes ao carregar a página
+window.addEventListener('DOMContentLoaded', atualizarNomesInterface);
+// Também atualizar ao voltar do configuracoes.html
+window.addEventListener('focus', atualizarNomesInterface);
+window.addEventListener('pageshow', atualizarNomesInterface);
+window.addEventListener('storage', atualizarNomesInterface);
+
+
+async function verificarSenha() {
+  const senha = senhaInput.value;
+  const token = localStorage.getItem('token');
+  try {
+    const resp = await fetch(`${API_ROOT}/usuario/verificar-senha`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+      },
+      body: JSON.stringify({ senha })
+    });
+    if (!resp.ok) throw new Error('Senha incorreta');
+    senhaInput.classList.remove('is-invalid');
+    senhaInput.classList.add('is-valid');
+    senhaModal.hide();
+    blocoInicial.classList.remove('d-none');
+    blocoSalvo.classList.add('d-none');
+  } catch {
+    senhaInput.classList.add('is-invalid');
+  }
+}
+
+function exportarPDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+
+  doc.setFontSize(18);
+  doc.setTextColor('#fd7e14');
+  doc.text('Histórico de Faturas - Conta de Agua', 14, 20);
+
+  // Busca histórico do backend para exportar (assíncrono)
+  const token = localStorage.getItem('token');
+  fetch(`${API_BASE}/historico`, {
+    headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+  })
+    .then(res => res.json())
+    .then(historico => {
+      if (historico.length === 0) {
+        alert('Não há histórico para exportar.');
+        return;
+      }
+
+      // Converte o canvas do gráfico para imagem PNG
+      const canvas = document.getElementById('graficoConsumo');
+      const imgData = canvas.toDataURL('image/png');
+
+      doc.addImage(imgData, 'PNG', 14, 30, 180, 80);
+
+      const startY = 30 + 80 + 10;
+
+      const colunas = ["Data", "Nome", "Consumo (M³)", "Valor a Pagar (R$)", "Consumo Total", "Valor Total"];
+      const linhas = historico.map(item => [
+        item.data,
+        item.nome,
+        item.consumo.toFixed(2),
+        item.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
+        item.consumoTotal.toFixed(2),
+        item.valorTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+      ]);
+
+      doc.autoTable({
+        head: [colunas],
+        body: linhas,
+        startY: startY,
+        styles: { fontSize: 10 },
+        headStyles: { fillColor: [253, 126, 20] }
+      });
+
+      doc.save('historico_faturas_conta_agua.pdf');
+    })
+    .catch(() => {
+      alert('Erro ao buscar histórico para exportar.');
+    });
+}
+
+// Botão sair (logout)
+const btnSair = document.getElementById('btnSair');
+if (btnSair) {
+  btnSair.addEventListener('click', () => {
+    localStorage.removeItem('token');
+    window.location.href = 'login.html';
+  });
+}
+</script>
+
+</body>
+</html>
+  if (graficoConsumo) {
+    graficoConsumo.data.labels = nomes;
+    graficoConsumo.update();
+  }
+

@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Calculadora de Fatura de Luz</title>
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
+  <style>
+    input:focus::placeholder {
+      color: #000 !important;
+      opacity: 1;
+    }
+    ::placeholder {
+      color: #fff !important;
+      opacity: 1;
+    }
+    :-ms-input-placeholder { color: #fff !important; }
+    ::-ms-input-placeholder { color: #fff !important; }
+    body {
+      background: linear-gradient(to bottom right, #1e1e1e, #121212);
+      color: #f8f9fa;
+      min-height: 100vh;
+    }
+    .container {
+      max-width: 800px;
+      padding: 1rem;
+    }
+    .card {
+      background: rgba(30,30,30,0.97);
+      color: #f8f9fa;
+      border-radius: 18px;
+      box-shadow: 0 0 24px #0008;
+      border: none;
+    }
+    .card-title {
+      font-size: 2rem;
+      color: #fd7e14;
+      letter-spacing: 1px;
+    }
+    .btn, .btn-lg, .btn-sm {
+      border-radius: 12px !important;
+      font-size: 1.1rem;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .btn:hover {
+      transform: scale(1.04);
+      box-shadow: 0 0 10px #fd7e1444;
+    }
+    .btn-outline-dark, .btn-outline-primary, .btn-outline-secondary {
+      color: #f8f9fa;
+      border-color: #444;
+    }
+    .btn-outline-dark:hover {
+      background: #222;
+      color: #fff;
+    }
+    .result-table th {
+      background-color: #fd7e14;
+      color: white;
+    }
+    .form-control {
+      border-radius: 10px;
+      background: #232323;
+      color: #f8f9fa;
+      border: 1px solid #444;
+    }
+    .form-control:focus {
+      border-color: #fd7e14;
+      box-shadow: 0 0 0 0.2rem #fd7e1433;
+    }
+    .alert {
+      border-radius: 10px;
+    }
+    @media (max-width: 576px) {
+      .card-title {
+        font-size: 1.4rem;
+      }
+      .btn, .btn-lg, .btn-sm {
+        font-size: 1rem;
+        padding: 12px;
+      }
+    }
+  </style>
+  <script src="nomes.js"></script>
+  <link rel="stylesheet" href="nomes.css">
+</head>
+<body>
+  <nav aria-label="Atalhos" style="width:100%;text-align:right;padding:12px 20px"><a href="configuracoes.html" class="btn btn-outline-primary">Configura&#231;&#245;es</a></nav>
+<script>
+  if (!localStorage.getItem('token')) {
+    window.location.href = 'login.html';
+  }
+</script>
+
+  <div class="container text-end mt-3">
+    <button id="btnSair" class="btn btn-danger btn-sm">
+      <i class="bi bi-box-arrow-right"></i> Sair
+    </button>
+  </div>
+
+
+  <!-- Container principal centralizado com largura máxima e margem reduzida -->
+    <div class="container mx-auto mt-1" style="max-width: 800px;">
+    <div class="d-flex flex-column gap-3 align-items-center">
+        <!-- Botão VOLTAR verde -->
+        <a href="index.html" class="btn btn-outline-dark btn-lg w-100" style="color: #28a745; border-color: #28a745;">
+        <i class="bi bi-arrow-left"></i> Voltar
+        </a>
+
+        <!-- Botão CALCULAR ÁGUA azul -->
+        <a href="agua.html" class="btn btn-outline-dark btn-lg w-100" style="color: #0d6efd; border-color: #0d6efd;">
+        <i class="bi bi-droplet"></i> Calcular Água
+        </a>
+    </div>
+    </div>
+
+
+
+
+  <div class="container my-0">
+    <div class="card shadow-sm">
+      <h1 class="card-title text-warning mb-4 text-center">
+        <i class="bi bi-lightning-charge-fill"></i> Calculadora de Fatura de Luz
+      </h1>
+
+      <div class="card-body">
+
+        <!-- 1. DADOS DA FATURA -->
+        <div class="mb-4">
+          <h5 class="mb-3">Dados da Fatura</h5>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="valorTotalFatura" class="form-label">Valor Total da Fatura (R$)</label>
+              <input type="number" class="form-control" id="valorTotalFatura" placeholder="Ex: 150.50" />
+              <div class="invalid-feedback">Campo inválido.</div>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="consumoTotalKwh" class="form-label">Consumo Total (kWh)</label>
+              <input type="number" class="form-control" id="consumoTotalKwh" placeholder="Ex: 350" />
+              <div class="invalid-feedback">Campo inválido.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. LEITURAS ANTERIORES -->
+        <div id="blocoLeituraAnteriorInicial" class="alert alert-warning">
+          <h5 class="alert-heading"><i class="bi bi-exclamation-triangle-fill"></i> Primeiro Uso Detectado!</h5>
+          <p>Por favor, insira as leituras anteriores para o primeiro cálculo.</p>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label id="labelLeituraAnterior1" for="leituraAnteriorKarinaInicial" class="form-label">Leitura anterior (kWh)</label>
+              <input type="number" class="form-control" id="leituraAnteriorKarinaInicial" />
+              <div class="invalid-feedback">Campo inválido.</div>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label id="labelLeituraAnterior2" for="leituraAnteriorLuizaInicial" class="form-label">Leitura anterior (kWh)</label>
+              <input type="number" class="form-control" id="leituraAnteriorLuizaInicial" />
+              <div class="invalid-feedback">Campo inválido.</div>
+            </div>
+          </div>
+        </div>
+
+        <div id="blocoLeituraAnteriorSalva" class="d-none">
+          <p><strong>Leituras anteriores salvas:</strong></p>
+          <ul>
+            <li><a id="labelLeituraSalva1" href="detalhes.html?kitinete=maior&amp;tipo=luz">Pessoa 1</a>: <strong id="leituraAnteriorKarinaSalva" class="text-warning"></strong> kWh</li>
+            <li><a id="labelLeituraSalva2" href="detalhes.html?kitinete=menor&amp;tipo=luz">Pessoa 2</a>: <strong id="leituraAnteriorLuizaSalva" class="text-warning"></strong> kWh</li>
+          </ul>
+          <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#senhaModal">
+            Alterar Leituras Anteriores
+          </button>
+          <hr />
+        </div>
+
+        <div class="mb-4">
+          <div id="tuyaStatus" class="small mt-2" role="status"></div>
+        </div>
+
+        <!-- 3. LEITURAS ATUAIS -->
+        <div class="mb-4">
+          <h5 class="mb-3">Leituras Atuais</h5>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label id="labelLeituraAtual1" for="leituraAtualKarina" class="form-label"><strong>Leitura atual (kWh)</strong></label>
+              <div class="d-flex flex-column gap-2 align-items-start">
+                <input type="number" step="any" min="0" class="form-control" id="leituraAtualKarina" readonly placeholder="Aguardando dispositivo" aria-describedby="origemKarina" />
+                <button type="button" class="btn btn-outline-secondary btn-sm" style="min-width:130px" id="manualKarina" onclick="alternarLeituraManual('Karina')" aria-pressed="false">Informar manualmente</button>
+              </div>
+              <div class="mt-2 mb-2">
+                <button type="button" class="btn btn-outline-primary btn-sm" onclick="abrirDataLeitura('Karina')">Informar data</button>
+                <div id="painelDataKarina" hidden class="mt-2">
+                  <label for="dataLeituraKarina">Data da leitura (às 12:00, horário de Brasília)</label>
+                  <input type="date" id="dataLeituraKarina" class="form-control" onchange="invalidarDataLeitura('Karina')">
+                  <button type="button" class="btn btn-primary btn-sm mt-2" onclick="buscarLeituraData('Karina')">Buscar nesta data</button>
+                  <small class="d-block">Usa o ultimo registro nas 24 horas anteriores e mostra o horario encontrado. O valor deve ser maior ou igual a leitura anterior.</small>
+                </div>
+              </div>
+              <small id="origemKarina" class="text-muted">Leitura do dispositivo Tuya</small>
+              <div class="invalid-feedback">Campo inválido.</div>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label id="labelLeituraAtual2" for="leituraAtualLuiza" class="form-label"><strong>Leitura atual (kWh)</strong></label>
+              <div class="d-flex flex-column gap-2 align-items-start">
+                <input type="number" step="any" min="0" class="form-control" id="leituraAtualLuiza" readonly placeholder="Aguardando dispositivo" aria-describedby="origemLuiza" />
+                <button type="button" class="btn btn-outline-secondary btn-sm" style="min-width:130px" id="manualLuiza" onclick="alternarLeituraManual('Luiza')" aria-pressed="false">Informar manualmente</button>
+              </div>
+              <div class="mt-2 mb-2">
+                <button type="button" class="btn btn-outline-primary btn-sm" onclick="abrirDataLeitura('Luiza')">Informar data</button>
+                <div id="painelDataLuiza" hidden class="mt-2">
+                  <label for="dataLeituraLuiza">Data da leitura (às 12:00, horário de Brasília)</label>
+                  <input type="date" id="dataLeituraLuiza" class="form-control" onchange="invalidarDataLeitura('Luiza')">
+                  <button type="button" class="btn btn-primary btn-sm mt-2" onclick="buscarLeituraData('Luiza')">Buscar nesta data</button>
+                  <small class="d-block">Usa o ultimo registro nas 24 horas anteriores e mostra o horario encontrado. O valor deve ser maior ou igual a leitura anterior.</small>
+                </div>
+              </div>
+              <small id="origemLuiza" class="text-muted">Leitura do dispositivo Tuya</small>
+              <div class="invalid-feedback">Campo inválido.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="d-grid gap-2 d-md-flex justify-content-md-end mb-4">
+          <button class="btn btn-warning" onclick="calcularFatura()">
+            <i class="bi bi-calculator"></i> Calcular Divisão
+          </button>
+          <button class="btn btn-danger" onclick="exportarPDF()">
+            <i class="bi bi-file-earmark-pdf-fill"></i> Exportar Histórico PDF
+          </button>
+        </div>
+
+        <div id="alertaErro" class="alert alert-danger d-none"></div>
+
+        <!-- 4. RESULTADOS -->
+        <div id="blocoResultados" class="mt-4">
+          <h4 class="text-success"><i class="bi bi-check-circle-fill"></i> Resultado</h4>
+          <p><strong>Valor Total da Fatura:</strong> R$ <span id="valorTotal"></span></p>
+          <p><strong>Consumo Total:</strong> <span id="consumoTotal"></span> kWh</p>
+          <p><strong>Preço médio por kWh:</strong> R$ <span id="valorPorKwh"></span></p>
+
+          <table class="table table-bordered mt-3 result-table text-center">
+            <thead>
+              <tr>
+                <th>Nome</th>
+                <th>Consumo (kWh)</th>
+                <th>Valor a pagar (R$)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><i class="bi bi-person-circle text-warning"></i> <a id="labelNome1" href="detalhes.html?kitinete=maior&amp;tipo=luz">Pessoa 1</a></td>
+                <td id="consumoKarina"></td>
+                <td id="valorKarina"></td>
+              </tr>
+              <tr>
+                <td><i class="bi bi-person-circle text-warning"></i> <a id="labelNome2" href="detalhes.html?kitinete=menor&amp;tipo=luz">Pessoa 2</a></td>
+                <td id="consumoLuiza"></td>
+                <td id="valorLuiza"></td>
+              </tr>
+              <tr>
+                <td><i class="bi bi-person-circle text-warning"></i> <a id="labelNome3" href="detalhes.html?kitinete=superior&amp;tipo=luz">Pessoa 3</a></td>
+                <td id="consumoTatiana"></td>
+                <td id="valorTatiana"></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- GRAFICO -->
+        <div class="mt-5">
+          <h5 class="text-center">Gráfico de Consumo (kWh)</h5>
+          <canvas id="graficoConsumo" height="100"></canvas>
+        </div>
+
+        <!-- Tabela Histórico -->
+        
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de Senha -->
+  <div class="modal fade" id="senhaModal" tabindex="-1" aria-labelledby="senhaModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="senhaModalLabel">Acesso Restrito</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+        <div class="modal-body">
+          <p>Para alterar as leituras anteriores, por favor, insira a senha.</p>
+          <input type="password" class="form-control" id="senhaInput" placeholder="Senha" />
+          <div class="invalid-feedback">Senha incorreta.</div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-primary" onclick="verificarSenha()">Confirmar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bootstrap JS Bundle -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+
+<script>
+// Senha mestra removida. Agora usa senha do usuário cadastrado.
+
+let graficoConsumo = null;
+const blocoInicial = document.getElementById('blocoLeituraAnteriorInicial');
+const blocoSalvo = document.getElementById('blocoLeituraAnteriorSalva');
+const senhaInput = document.getElementById('senhaInput');
+const modalElement = document.getElementById('senhaModal');
+const senhaModal = new bootstrap.Modal(modalElement);
+
+const API_ROOT = 'http://localhost:3000/api';
+const API_BASE = `${API_ROOT}/luz`;
+
+window.onload = async function () {
+  await atualizarLeiturasAutomaticas().catch(() => {});
+  try {
+    const token = localStorage.getItem('token');
+    const respLeituras = await fetch(`${API_BASE}/leituras`, {
+      headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+    });
+    const leituras = await respLeituras.json();
+
+    if (leituras.karina !== undefined && leituras.luiza !== undefined) {
+      document.getElementById('leituraAnteriorKarinaSalva').textContent = leituras.karina;
+      document.getElementById('leituraAnteriorLuizaSalva').textContent = leituras.luiza;
+      blocoInicial.classList.add('d-none');
+      blocoSalvo.classList.remove('d-none');
+    } else {
+      blocoInicial.classList.remove('d-none');
+      blocoSalvo.classList.add('d-none');
+    }
+  } catch {
+    blocoInicial.classList.remove('d-none');
+    blocoSalvo.classList.add('d-none');
+  }
+
+
+};
+
+let configuracaoTuya = null;
+const leituraData = { Karina: false, Luiza: false };
+const versaoLeituraData = { Karina: 0, Luiza: 0 };
+const leituraManual = { Karina: false, Luiza: false };
+let consultaTuyaEmAndamento = null;
+async function alternarLeituraManual(pessoa) {
+  leituraData[pessoa] = false;
+  versaoLeituraData[pessoa]++;
+  document.getElementById('painelData' + pessoa).hidden = true;
+  leituraManual[pessoa] = !leituraManual[pessoa];
+  const campo = document.getElementById('leituraAtual' + pessoa);
+  campo.readOnly = !leituraManual[pessoa];
+  const botao = document.getElementById('manual' + pessoa);
+  botao.textContent = leituraManual[pessoa] ? 'Usar dispositivo' : 'Informar manualmente';
+  botao.setAttribute('aria-pressed', String(leituraManual[pessoa]));
+  document.getElementById('origem' + pessoa).textContent = leituraManual[pessoa] ? 'Leitura manual' : 'Aguardando dispositivo';
+  if (leituraManual[pessoa]) campo.focus();
+  else {
+    campo.value = '';
+    await atualizarLeiturasAutomaticas().catch(() => {});
+  }
+}
+async function atualizarLeiturasAutomaticas() {
+  if (['Karina', 'Luiza'].every(p => leituraManual[p] || leituraData[p])) return;
+  if (consultaTuyaEmAndamento) return consultaTuyaEmAndamento;
+  consultaTuyaEmAndamento = (async () => {
+    await carregarConfiguracaoTuya();
+    if (!configuracaoTuya?.pessoa1?.deviceId || !configuracaoTuya?.pessoa2?.deviceId) {
+      const mensagem = 'Configure os dois disjuntores em Configuracoes ou escolha Informar manualmente.';
+      document.getElementById('tuyaStatus').textContent = mensagem;
+      throw new Error(mensagem);
+    }
+    return buscarLeiturasTuya();
+  })();
+  try { return await consultaTuyaEmAndamento; }
+  finally { consultaTuyaEmAndamento = null; }
+}
+async function carregarConfiguracaoTuya() {
+  try {
+    const resp = await fetch(API_ROOT + '/tuya/config', { headers: { Authorization: 'Bearer ' + localStorage.getItem('token') } });
+    if (!resp.ok) throw new Error('Falha ao carregar os disjuntores. Verifique seu login.');
+    configuracaoTuya = await resp.json();
+  } catch (error) {
+    configuracaoTuya = null;
+    document.getElementById('tuyaStatus').textContent = error.message;
+  }
+}
+
+async function buscarLeiturasTuya() {
+  const token = localStorage.getItem('token');
+  const status = document.getElementById('tuyaStatus');
+  status.className = 'small mt-2 text-info'; status.textContent = 'Consultando disjuntores na Tuya...';
+  try {
+    const resp = await fetch(`${API_BASE}/tuya/leituras`, { headers: token ? { 'Authorization': 'Bearer ' + token } : {} });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error([data.erro, data.detalhes].filter(Boolean).join(' '));
+    for (const pessoa of ['Karina', 'Luiza']) {
+      if (leituraManual[pessoa] || leituraData[pessoa]) continue;
+      const valor = data[pessoa.toLowerCase()];
+      if (typeof valor !== 'number' || !Number.isFinite(valor) || valor < 0) throw new Error('Leitura invalida recebida do dispositivo.');
+      document.getElementById('leituraAtual' + pessoa).value = valor.toFixed(2);
+      document.getElementById('origem' + pessoa).textContent = 'Dispositivo atualizado: ' + new Date().toLocaleTimeString('pt-BR');
+    }
+    status.className = 'small mt-2 text-success';
+    status.textContent = `Leituras recebidas: ${Number(data.karina).toFixed(2)} kWh e ${Number(data.luiza).toFixed(2)} kWh.`;
+    return data;
+  } catch (e) {
+    status.className = 'small mt-2 text-danger'; status.textContent = e.message || 'Falha ao consultar a Tuya.';
+    throw e;
+  }
+}
+
+function invalidarDataLeitura(pessoa) {
+  versaoLeituraData[pessoa]++;
+  document.getElementById('leituraAtual' + pessoa).value = '';
+  document.getElementById('origem' + pessoa).textContent = 'Selecione a data e clique em Buscar nesta data.';
+}
+
+function abrirDataLeitura(pessoa) {
+  leituraData[pessoa] = true;
+  leituraManual[pessoa] = false;
+  document.getElementById('painelData' + pessoa).hidden = false;
+  document.getElementById('leituraAtual' + pessoa).readOnly = true;
+  document.getElementById('manual' + pessoa).textContent = 'Informar manualmente';
+  document.getElementById('manual' + pessoa).setAttribute('aria-pressed', 'false');
+  invalidarDataLeitura(pessoa);
+  document.getElementById('dataLeitura' + pessoa).focus();
+}
+
+async function buscarLeituraData(pessoa) {
+  const version = ++versaoLeituraData[pessoa];
+  const campo = document.getElementById('leituraAtual' + pessoa);
+  const origem = document.getElementById('origem' + pessoa);
+  campo.value = '';
+  const selectedDate = document.getElementById('dataLeitura' + pessoa).value;
+  const at = new Date(selectedDate + 'T12:00:00-03:00');
+  if (!Number.isFinite(+at) || +at > Date.now()) {
+    origem.textContent = 'Selecione uma data cujo horário de 12:00 em Brasília já tenha ocorrido.';
+    return;
+  }
+  origem.textContent = 'Consultando histórico Tuya...';
+  try {
+    const kitinete = pessoa === 'Karina' ? 'maior' : 'menor';
+    const response = await fetch(`${API_BASE}/tuya/leitura-data/${kitinete}?data=${encodeURIComponent(at.toISOString())}`, {
+      headers: { Authorization: 'Bearer ' + localStorage.getItem('token') }
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.erro || 'Falha ao consultar leitura histórica.');
+    if (version !== versaoLeituraData[pessoa] || !leituraData[pessoa]) return;
+    if (!Number.isFinite(data.kwh) || data.kwh < 0) throw new Error('Leitura histórica inválida.');
+    campo.value = data.kwh.toFixed(2);
+    origem.textContent = `Leitura histórica de ${new Date(data.timestamp).toLocaleString('pt-BR')}: ${campo.value} kWh. A referência anterior não será alterada neste cálculo.`;
+  } catch (error) {
+    if (version === versaoLeituraData[pessoa] && leituraData[pessoa]) origem.textContent = error.message;
+  }
+}
+
+function getLeituraAnterior() {
+  let karina, luiza;
+  if (blocoInicial.classList.contains('d-none')) {
+    karina = parseFloat(document.getElementById('leituraAnteriorKarinaSalva').textContent);
+    luiza = parseFloat(document.getElementById('leituraAnteriorLuizaSalva').textContent);
+  } else {
+    karina = parseFloat(document.getElementById('leituraAnteriorKarinaInicial').value);
+    luiza = parseFloat(document.getElementById('leituraAnteriorLuizaInicial').value);
+  }
+  return { karina, luiza };
+}
+
+function validarCampos(leiturasAnteriores, leiturasAtuais, fatura) {
+  const alertaErro = document.getElementById('alertaErro');
+  let mensagensErro = [];
+
+  function marcarCampo(id, valido) {
+    const campo = document.getElementById(id);
+    if (!campo) return;
+    campo.classList.remove('is-valid', 'is-invalid');
+    campo.classList.add(valido ? 'is-valid' : 'is-invalid');
+  }
+
+  // Valida fatura
+  const faturaValida = !isNaN(fatura.valorTotal) && fatura.valorTotal > 0;
+  const consumoValido = !isNaN(fatura.consumoTotal) && fatura.consumoTotal > 0;
+  marcarCampo('valorTotalFatura', faturaValida);
+  marcarCampo('consumoTotalKwh', consumoValido);
+  if (!faturaValida) mensagensErro.push('Valor total da fatura inválido.');
+  if (!consumoValido) mensagensErro.push('Consumo total em kWh inválido.');
+
+  // Valida leituras anteriores
+  const antKarina = !isNaN(leiturasAnteriores.karina);
+  const antLuiza = !isNaN(leiturasAnteriores.luiza);
+  marcarCampo('leituraAnteriorKarinaInicial', antKarina);
+  marcarCampo('leituraAnteriorLuizaInicial', antLuiza);
+  if (!antKarina) mensagensErro.push('Leitura anterior de Karina inválida.');
+  if (!antLuiza) mensagensErro.push('Leitura anterior de Luiza inválida.');
+
+  // Valida leituras atuais
+  const atualKarina = !isNaN(leiturasAtuais.karina) && leiturasAtuais.karina >= leiturasAnteriores.karina;
+  const atualLuiza = !isNaN(leiturasAtuais.luiza) && leiturasAtuais.luiza >= leiturasAnteriores.luiza;
+  marcarCampo('leituraAtualKarina', atualKarina);
+  marcarCampo('leituraAtualLuiza', atualLuiza);
+  if (!atualKarina) mensagensErro.push('Leitura atual de Karina inválida ou menor que a anterior.');
+  if (!atualLuiza) mensagensErro.push('Leitura atual de Luiza inválida ou menor que a anterior.');
+
+  if (mensagensErro.length > 0) {
+    alertaErro.textContent = mensagensErro.join('\n');
+    alertaErro.style.whiteSpace = 'pre-line';
+    alertaErro.classList.remove('d-none');
+    document.getElementById('blocoResultados').style.display = 'none';
+    return false;
+  }
+
+  alertaErro.classList.add('d-none');
+  return true;
+}
+
+async function calcularFatura() {
+  const token = localStorage.getItem('token');
+  const alertaErro = document.getElementById('alertaErro');
+  if (alertaErro) {
+    alertaErro.classList.add('d-none');
+    alertaErro.textContent = '';
+  }
+
+  try {
+    await atualizarLeiturasAutomaticas();
+  } catch {
+    alertaErro.textContent = 'Nao foi possivel atualizar as leituras. Tente novamente ou escolha Informar manualmente nos campos.';
+    alertaErro.classList.remove('d-none');
+    return;
+  }
+
+  const leiturasAnteriores = getLeituraAnterior();
+  const leiturasAtuais = {
+    karina: parseFloat(document.getElementById('leituraAtualKarina').value),
+    luiza: parseFloat(document.getElementById('leituraAtualLuiza').value)
+  };
+  const fatura = {
+    valorTotal: parseFloat(document.getElementById('valorTotalFatura').value),
+    consumoTotal: parseFloat(document.getElementById('consumoTotalKwh').value)
+  };
+
+  if (!validarCampos(leiturasAnteriores, leiturasAtuais, fatura)) {
+    return;
+  }
+
+  const valorPorKwh = fatura.valorTotal / fatura.consumoTotal;
+  const consumoKarina = leiturasAtuais.karina - leiturasAnteriores.karina;
+  const consumoLuiza = leiturasAtuais.luiza - leiturasAnteriores.luiza;
+  const consumoTatiana = fatura.consumoTotal - (consumoKarina + consumoLuiza);
+
+  const valorKarina = consumoKarina * valorPorKwh;
+  const valorLuiza = consumoLuiza * valorPorKwh;
+  const valorTatiana = consumoTatiana * valorPorKwh;
+
+  document.getElementById('consumoKarina').textContent = consumoKarina.toFixed(2);
+  document.getElementById('consumoLuiza').textContent = consumoLuiza.toFixed(2);
+  document.getElementById('consumoTatiana').textContent = consumoTatiana.toFixed(2);
+  document.getElementById('consumoTotal').textContent = fatura.consumoTotal.toFixed(2);
+
+  document.getElementById('valorKarina').textContent = valorKarina.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  document.getElementById('valorLuiza').textContent = valorLuiza.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  document.getElementById('valorTatiana').textContent = valorTatiana.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  document.getElementById('valorTotal').textContent = fatura.valorTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  document.getElementById('valorPorKwh').textContent = valorPorKwh.toFixed(4);
+
+  if (!Object.values(leituraData).some(Boolean)) {
+  // Salvar leituras anteriores via API
+  try {
+    const payload = {
+      karina: leiturasAtuais.karina,
+      luiza: leiturasAtuais.luiza,
+      data: new Date().toLocaleString('pt-BR')
+    };
+    await fetch(`${API_BASE}/leituras`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+      },
+      body: JSON.stringify(payload)
+    });
+
+    document.getElementById('leituraAnteriorKarinaSalva').textContent = leiturasAtuais.karina;
+    document.getElementById('leituraAnteriorLuizaSalva').textContent = leiturasAtuais.luiza;
+    blocoInicial.classList.add('d-none');
+    blocoSalvo.classList.remove('d-none');
+  } catch {
+    alert('Erro ao salvar leituras anteriores no servidor.');
+  }
+
+  }
+  document.getElementById('blocoResultados').style.display = 'block';
+
+  // Salvar histórico para cada pessoa via API
+  try {
+    const pessoas = [
+      { nome: 'Karina', consumo: consumoKarina, valor: valorKarina },
+      { nome: 'Luiza', consumo: consumoLuiza, valor: valorLuiza },
+      { nome: 'Tatiana', consumo: consumoTatiana, valor: valorTatiana }
+    ];
+
+    for (const p of pessoas) {
+      const payload = {
+        data: new Date().toLocaleString('pt-BR'),
+        nome: p.nome,
+        consumo: p.consumo,
+        valor: p.valor,
+        consumoTotal: fatura.consumoTotal,
+        valorTotal: fatura.valorTotal
+      };
+      console.log('Enviando histórico:', payload);
+      const resp = await fetch(`${API_BASE}/historico`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+        },
+        body: JSON.stringify(payload)
+      });
+      if (!resp.ok) {
+        const erro = await resp.json().catch(() => ({}));
+        console.error('Erro ao salvar histórico:', erro);
+        alert('Erro ao salvar histórico: ' + (erro.erro || resp.status));
+      }
+    }
+
+
+    if (alertaErro) {
+      alertaErro.classList.add('d-none');
+      alertaErro.textContent = '';
+    }
+
+  } catch {
+    if (alertaErro) {
+      alertaErro.textContent = 'Erro ao salvar histórico no servidor.';
+      alertaErro.classList.remove('d-none');
+    } else {
+      alert('Erro ao salvar histórico no servidor.');
+    }
+  }
+
+  desenharGrafico(consumoKarina, consumoLuiza, consumoTatiana);
+}
+
+function desenharGrafico(karina, luiza, tatiana) {
+  const ctx = document.getElementById('graficoConsumo').getContext('2d');
+  const nomes = getNomesDinamicos();
+  if (graficoConsumo) {
+    graficoConsumo.destroy();
+  }
+  graficoConsumo = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: nomes,
+      datasets: [{
+        label: 'Consumo (kWh)',
+        data: [karina, luiza, tatiana],
+        backgroundColor: ['#0c6cfc', '#1c8454', '#ffc107'],
+        borderColor: '#dee2e6',
+        borderWidth: 1,
+        borderRadius: 6
+      }]
+    },
+    options: {
+      responsive: true,
+      animation: {
+        duration: 1000,
+        easing: 'easeOutBounce'
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          title: {
+            display: true,
+            text: 'Consumo (kWh)'
+          },
+          ticks: {
+            precision: 0
+          },
+          grid: {
+            color: '#dee2e6'
+          }
+        },
+        x: {
+          grid: {
+            display: false
+          }
+        }
+      },
+      plugins: {
+        legend: {
+          display: false
+        },
+        tooltip: {
+          callbacks: {
+            label: function (context) {
+              const valor = context.parsed.y;
+              return `${context.label}: ${valor.toFixed(2)} kWh`;
+            }
+          }
+        }
+      }
+    }
+  });
+}
+// Função para obter nomes dinâmicos do localStorage ou padrão
+
+
+// Atualiza todos os labels de nomes na interface
+function atualizarNomesInterface() {
+  const nomes = getNomesDinamicos();
+  // Labels dos campos de leitura
+  const labelLeituraAnterior1 = document.getElementById('labelLeituraAnterior1');
+  const labelLeituraAnterior2 = document.getElementById('labelLeituraAnterior2');
+  const labelLeituraSalva1 = document.getElementById('labelLeituraSalva1');
+  const labelLeituraSalva2 = document.getElementById('labelLeituraSalva2');
+  const labelLeituraAtual1 = document.getElementById('labelLeituraAtual1');
+  const labelLeituraAtual2 = document.getElementById('labelLeituraAtual2');
+  const labelNome1 = document.getElementById('labelNome1');
+  const labelNome2 = document.getElementById('labelNome2');
+  const labelNome3 = document.getElementById('labelNome3');
+  if (labelLeituraAnterior1) labelLeituraAnterior1.textContent = `Leitura anterior ${nomes[0]} (kWh)`;
+  if (labelLeituraAnterior2) labelLeituraAnterior2.textContent = `Leitura anterior ${nomes[1]} (kWh)`;
+  if (labelLeituraSalva1) labelLeituraSalva1.textContent = nomes[0];
+  if (labelLeituraSalva2) labelLeituraSalva2.textContent = nomes[1];
+  if (labelLeituraAtual1) labelLeituraAtual1.textContent = `Leitura atual ${nomes[0]} (kWh)`;
+  if (labelLeituraAtual2) labelLeituraAtual2.textContent = `Leitura atual ${nomes[1]} (kWh)`;
+  if (labelNome1) labelNome1.textContent = nomes[0];
+  if (labelNome2) labelNome2.textContent = nomes[1];
+  if (labelNome3) labelNome3.textContent = nomes[2];
+  const tuyaLabel1 = document.getElementById('tuyaLabel1');
+  const tuyaLabel2 = document.getElementById('tuyaLabel2');
+  if (tuyaLabel1) tuyaLabel1.textContent = `Device ID - ${nomes[0]}`;
+  if (tuyaLabel2) tuyaLabel2.textContent = `Device ID - ${nomes[1]}`;
+}
+
+// Atualizar nomes ao carregar a página
+window.addEventListener('DOMContentLoaded', atualizarNomesInterface);
+// Também atualizar ao voltar do configuracoes.html
+window.addEventListener('focus', atualizarNomesInterface);
+window.addEventListener('pageshow', atualizarNomesInterface);
+window.addEventListener('storage', atualizarNomesInterface);
+
+async function verificarSenha() {
+  const senha = senhaInput.value;
+  const token = localStorage.getItem('token');
+  try {
+    const resp = await fetch(`${API_ROOT}/usuario/verificar-senha`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+      },
+      body: JSON.stringify({ senha })
+    });
+    if (!resp.ok) throw new Error('Senha incorreta');
+    senhaInput.classList.remove('is-invalid');
+    senhaInput.classList.add('is-valid');
+    senhaModal.hide();
+    blocoInicial.classList.remove('d-none');
+    blocoSalvo.classList.add('d-none');
+  } catch {
+    senhaInput.classList.add('is-invalid');
+  }
+}
+
+function exportarPDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+
+  doc.setFontSize(18);
+  doc.setTextColor('#fd7e14');
+  doc.text('Histórico de Faturas - Conta de Luz', 14, 20);
+
+  // Busca histórico do backend para exportar (assíncrono)
+  const token = localStorage.getItem('token');
+  fetch(`${API_BASE}/historico`, {
+    headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+  })
+    .then(res => res.json())
+    .then(historico => {
+      if (historico.length === 0) {
+        alert('Não há histórico para exportar.');
+        return;
+      }
+
+      // Converte o canvas do gráfico para imagem PNG
+      const canvas = document.getElementById('graficoConsumo');
+      const imgData = canvas.toDataURL('image/png');
+
+      doc.addImage(imgData, 'PNG', 14, 30, 180, 80);
+
+      const startY = 30 + 80 + 10;
+
+      const colunas = ["Data", "Nome", "Consumo (kWh)", "Valor a Pagar (R$)", "Consumo Total", "Valor Total"];
+      const linhas = historico.map(item => [
+        item.data,
+        item.nome,
+        item.consumo.toFixed(2),
+        item.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
+        item.consumoTotal.toFixed(2),
+        item.valorTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+      ]);
+
+      doc.autoTable({
+        head: [colunas],
+        body: linhas,
+        startY: startY,
+        styles: { fontSize: 10 },
+        headStyles: { fillColor: [253, 126, 20] }
+      });
+
+      doc.save('historico_faturas_conta_luz.pdf');
+    })
+    .catch(() => {
+      alert('Erro ao buscar histórico para exportar.');
+    });
+}
+
+// Botão sair (logout)
+const btnSair = document.getElementById('btnSair');
+if (btnSair) {
+  btnSair.addEventListener('click', () => {
+    localStorage.removeItem('token');
+    window.location.href = 'login.html';
+  });
+}
+</script>
+</body>
+</html>
+  if (graficoConsumo) {
+    graficoConsumo.data.labels = nomes;
+    graficoConsumo.update();
+  }
+

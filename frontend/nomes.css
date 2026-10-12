@@ -1,0 +1,29 @@
+a[href^="detalhes.html?kitinete="] {
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+  max-width: 100%;
+  padding: 0.55rem 0.9rem;
+  margin: 0.2rem 0;
+  border: 1px solid #9ec5fe;
+  border-radius: 0.65rem;
+  background: #e7f1ff;
+  color: #084298;
+  font-size: 1.2rem;
+  font-weight: 700;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+a[href^="detalhes.html?kitinete="]:hover {
+  background: #cfe2ff;
+  border-color: #084298;
+  color: #052c65;
+}
+
+a[href^="detalhes.html?kitinete="]:focus-visible {
+  outline: 3px solid #084298;
+  outline-offset: 3px;
+}

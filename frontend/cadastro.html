@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cadastro - Calcular Gastos</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body {
+      background: linear-gradient(to bottom right, #1e1e1e, #121212);
+      color: #f8f9fa;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      text-align: center;
+      padding: 20px;
+    }
+
+    h2 {
+      font-size: 2.2rem;
+      color: #ffffff;
+      margin-bottom: 0.5em;
+    }
+
+    .form-label {
+      font-weight: 500;
+      color: #cccccc;
+    }
+
+    .cadastro-container {
+      width: 100%;
+      max-width: 400px;
+      background: rgba(30,30,30,0.95);
+      border-radius: 16px;
+      box-shadow: 0 0 24px #0008;
+      padding: 2.5rem 2rem 2rem 2rem;
+      margin: 0 auto;
+    }
+
+    .btn-custom {
+      width: 100%;
+      padding: 15px;
+      font-size: 1.2rem;
+      margin: 10px 0;
+      border-radius: 12px;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .btn-custom:hover {
+      transform: scale(1.05);
+      box-shadow: 0 0 15px rgba(255,255,255,0.2);
+    }
+    .btn-orange {
+      background-color: #ff9800;
+      color: white;
+      border: none;
+    }
+    .btn-orange:hover {
+      background-color: #e68900;
+    }
+    .btn-outline-light {
+      border-color: #fff;
+      color: #fff;
+    }
+    .btn-outline-light:hover {
+      background: #fff;
+      color: #222;
+    }
+    @media (max-width: 576px) {
+      h2 {
+        font-size: 1.5rem;
+      }
+      .cadastro-container {
+        padding: 1.2rem 0.5rem;
+      }
+      .btn-custom {
+        font-size: 1rem;
+        padding: 12px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav aria-label="Atalhos" style="width:100%;text-align:right;padding:12px 20px"><a href="configuracoes.html" class="btn btn-outline-primary">Configura&#231;&#245;es</a></nav>
+  <div class="cadastro-container">
+    <h2 class="mb-4">Cadastro</h2>
+    <form id="cadastroForm">
+      <div class="mb-3">
+        <label for="email" class="form-label">E-mail</label>
+        <input type="email" class="form-control" id="email" required />
+      </div>
+      <div class="mb-3">
+        <label for="senha" class="form-label">Senha</label>
+        <input type="password" class="form-control" id="senha" required />
+      </div>
+      <button type="submit" class="btn btn-orange btn-custom">Cadastrar</button>
+      <a href="login.html" class="btn btn-outline-light btn-custom">Já tenho conta</a>
+      <a href="index.html" class="btn btn-outline-secondary btn-custom">Voltar</a>
+      <div id="cadastroErro" class="text-danger mt-3 d-none"></div>
+      <div id="cadastroSucesso" class="text-success mt-3 d-none"></div>
+    </form>
+  </div>
+  <script>
+  const API_BASE_URL = 'http://localhost:3000';
+    document.getElementById('cadastroForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const email = document.getElementById('email').value;
+      const senha = document.getElementById('senha').value;
+      const erroDiv = document.getElementById('cadastroErro');
+      const sucessoDiv = document.getElementById('cadastroSucesso');
+      erroDiv.classList.add('d-none');
+      sucessoDiv.classList.add('d-none');
+      try {
+        const resp = await fetch(`${API_BASE_URL}/api/cadastro`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, senha })
+        });
+        if (!resp.ok) {
+          const erro = await resp.json().catch(() => ({}));
+          erroDiv.textContent = erro.erro || 'Erro ao cadastrar usuário.';
+          erroDiv.classList.remove('d-none');
+          return;
+        }
+        sucessoDiv.textContent = 'Cadastro realizado com sucesso! Faça login.';
+        sucessoDiv.classList.remove('d-none');
+        setTimeout(() => { window.location.href = 'login.html'; }, 1500);
+      } catch {
+        erroDiv.textContent = 'Erro ao conectar ao servidor.';
+        erroDiv.classList.remove('d-none');
+      }
+    });
+  </script>
+</body>
+</html>
