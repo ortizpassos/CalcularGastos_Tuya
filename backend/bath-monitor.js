@@ -2,6 +2,8 @@ const tuya = require('./tuya-client');
 const { randomUUID } = require('node:crypto');
 const INTERVAL = 30000;
 const specs = new Map();
+const CURRENT_CODE_HINTS = ['cur_current', 'current', 'electric_current', 'ele_current', 'current_a', 'current_ma', 'amps', 'amperage', 'ampere', 'rms_current'];
+const POWER_CODE_HINTS = ['cur_power', 'power', 'active_power', 'electric_power', 'ele_power', 'power_w', 'watt'];
 
 async function latestTariff(db, usuario) {
   const last = await db.collection('historicos').findOne({ usuario, tipo: 'luz',
@@ -48,15 +50,25 @@ function hourlyReadingUsage(readings, start, end, tariff) {
 
 function measurement(status, specification, code, divisor, unit) {
   const item = status.find(item => item.code === code);
-  if (!item || typeof item.value !== 'number' || !Number.isFinite(item.value) || item.value < 0) return null;
-  if (divisor) return item.value / divisor;
+  const raw = item && (typeof item.value === 'number' || (typeof item.value === 'string' && item.value.trim() !== '')) ? Number(item.value) : NaN;
+  if (!item || !Number.isFinite(raw) || raw < 0) return null;
+  if (divisor) return raw / divisor;
   const spec = (specification.status || []).find(item => item.code === code);
   let values;
   try { values = typeof spec?.values === 'string' ? JSON.parse(spec.values) : spec?.values; } catch { return null; }
   if (!values || !Number.isInteger(values.scale) || values.scale < 0 || values.scale > 9) return null;
   const factors = unit === 'A' ? { A: 1, mA: 0.001 } : { W: 1, kW: 1000 };
   const factor = factors[values.unit];
-  return factor == null ? null : item.value / 10 ** values.scale * factor;
+  return factor == null ? null : raw / 10 ** values.scale * factor;
+}
+
+function findMeasurement(status, specification, configuredCode, divisor, unit, hints) {
+  const candidates = [configuredCode, ...hints, ...status.map(item => item.code)].filter(Boolean);
+  for (const code of [...new Set(candidates)]) {
+    const value = measurement(status, specification, code, code === configuredCode ? divisor : null, unit);
+    if (value != null) return value;
+  }
+  return null;
 }
 
 // Left-sample timing: the previous observation represents the following interval.
@@ -91,10 +103,10 @@ async function telemetry(deviceId, config) {
     specs.set(deviceId, specification);
   }
   const status = await tuya.getDeviceStatus(deviceId);
-  const currentA = measurement(status, specification.value, config.currentCode, config.currentDivisor, 'A');
-  if (currentA == null) throw new Error('Corrente indisponível: confira o DP e sua escala nas configurações do monitor.');
+  const currentA = findMeasurement(status, specification.value, config.currentCode, config.currentDivisor, 'A', CURRENT_CODE_HINTS);
+  if (currentA == null) throw new Error(`Corrente indisponível: nenhum DP de corrente com escala válida. DPs recebidos: ${status.map(item => item.code).join(', ')}`);
   return { at: new Date(), currentA,
-    powerW: measurement(status, specification.value, config.powerCode, config.powerDivisor, 'W') };
+    powerW: findMeasurement(status, specification.value, config.powerCode, config.powerDivisor, 'W', POWER_CODE_HINTS) };
 }
 
 async function startMonitor(db) {
@@ -213,4 +225,4 @@ function installRoutes(app, auth, getDb) {
   });
 }
 
-module.exports = { measurement, advance, startMonitor, installRoutes, hourlyUsage, hourlyReadingUsage, latestTariff };
+module.exports = { measurement, findMeasurement, advance, startMonitor, installRoutes, hourlyUsage, hourlyReadingUsage, latestTariff };

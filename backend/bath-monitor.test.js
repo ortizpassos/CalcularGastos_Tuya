@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { advance, measurement, installRoutes, hourlyReadingUsage } = require('./bath-monitor');
+const { advance, measurement, findMeasurement, installRoutes, hourlyReadingUsage } = require('./bath-monitor');
 const config = { usuario: 'teste', kitinete: 'maior', deviceId: 'device', revision: 'v1', thresholdA: 16 };
 const sample = (seconds, currentA, powerW = 5000) => ({ at: new Date(seconds * 1000), currentA, powerW });
 
@@ -48,6 +48,12 @@ test('DP conversion respects metadata unit and scale, including milliamps', () =
   assert.equal(measurement(status, {}, 'cur_current', null, 'A'), null);
   assert.equal(measurement(status, {}, 'cur_current', 1000, 'A'), 17);
   assert.equal(measurement([{ code: 'x', value: true }], {}, 'x', 1, 'A'), null);
+});
+
+test('monitor finds alternate current DP and accepts numeric strings', () => {
+  const status = [{ code: 'electric_current', value: '18500' }];
+  const spec = { status: [{ code: 'electric_current', values: { scale: 0, unit: 'mA' } }] };
+  assert.equal(findMeasurement(status, spec, 'cur_current', null, 'A', ['cur_current', 'electric_current']), 18.5);
 });
 
 test('all monitor endpoints require auth, reject superior and invalid threshold', async () => {
