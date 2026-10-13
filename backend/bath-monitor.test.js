@@ -56,6 +56,12 @@ test('monitor finds alternate current DP and accepts numeric strings', () => {
   assert.equal(findMeasurement(status, spec, 'cur_current', null, 'A', ['cur_current', 'electric_current']), 18.5);
 });
 
+test('device scale takes priority over an old divisor', () => {
+  const status = [{ code: 'cur_current', value: 7 }];
+  const spec = { status: [{ code: 'cur_current', values: { scale: 1, unit: 'A' } }] };
+  assert.equal(measurement(status, spec, 'cur_current', 1000, 'A'), 0.7);
+});
+
 test('all monitor endpoints require auth, reject superior and invalid threshold', async () => {
   const routes = {};
   const auth = () => {};

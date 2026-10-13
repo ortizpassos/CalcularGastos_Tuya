@@ -52,14 +52,15 @@ function measurement(status, specification, code, divisor, unit) {
   const item = status.find(item => item.code === code);
   const raw = item && (typeof item.value === 'number' || (typeof item.value === 'string' && item.value.trim() !== '')) ? Number(item.value) : NaN;
   if (!item || !Number.isFinite(raw) || raw < 0) return null;
-  if (divisor) return raw / divisor;
   const spec = (specification.status || []).find(item => item.code === code);
   let values;
   try { values = typeof spec?.values === 'string' ? JSON.parse(spec.values) : spec?.values; } catch { return null; }
-  if (!values || !Number.isInteger(values.scale) || values.scale < 0 || values.scale > 9) return null;
-  const factors = unit === 'A' ? { A: 1, mA: 0.001 } : { W: 1, kW: 1000 };
-  const factor = factors[values.unit];
-  return factor == null ? null : raw / 10 ** values.scale * factor;
+  if (values && Number.isInteger(values.scale) && values.scale >= 0 && values.scale <= 9) {
+    const factors = unit === 'A' ? { A: 1, mA: 0.001 } : { W: 1, kW: 1000 };
+    const factor = factors[values.unit];
+    if (factor != null) return raw / 10 ** values.scale * factor;
+  }
+  return divisor ? raw / divisor : null;
 }
 
 function findMeasurement(status, specification, configuredCode, divisor, unit, hints) {
