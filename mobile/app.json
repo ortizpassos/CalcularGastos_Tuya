@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "name": "Calcular Gastos",
+    "slug": "calcular-gastos",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "android": {
+      "package": "com.calculargastos.app"
+    },
+    "plugins": [
+      "@react-native-community/datetimepicker"
+    ]
+  }
+}
