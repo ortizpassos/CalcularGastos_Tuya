@@ -311,6 +311,34 @@ app.get('/api/:tipo/resultado', autenticarJWT, async (req, res) => {
 // app.use(express.static('public'));
 
 // --- INTEGRAÇÃO TUYA ---
+app.get('/api/usuario/configuracoes', autenticarJWT, async (req, res) => {
+  try {
+    const db = mongo.getDb();
+    const config = await db.collection('configuracoes_usuario').findOne({ usuario: req.usuario.email });
+    res.json({ nomes: Array.isArray(config?.nomes) ? config.nomes : null, atualizadoEm: config?.atualizadoEm || null });
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro ao carregar configurações do usuário.' });
+  }
+});
+
+app.post('/api/usuario/configuracoes', autenticarJWT, async (req, res) => {
+  const nomes = Array.isArray(req.body.nomes) ? req.body.nomes.map(nome => String(nome || '').trim()) : [];
+  if (nomes.length !== 3 || nomes.some(nome => !nome || nome.length > 100)) {
+    return res.status(400).json({ erro: 'Informe os três nomes dos moradores.' });
+  }
+  try {
+    const db = mongo.getDb();
+    await db.collection('configuracoes_usuario').updateOne(
+      { usuario: req.usuario.email },
+      { $set: { nomes, atualizadoEm: new Date() } },
+      { upsert: true }
+    );
+    res.json({ mensagem: 'Nomes dos moradores salvos.', nomes });
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro ao salvar configurações do usuário.' });
+  }
+});
+
 // A configuração dos Device IDs é salva por usuário. As credenciais da Tuya ficam
 // somente no servidor (TUYA_CLIENT_ID / TUYA_CLIENT_SECRET).
 app.get('/api/tuya/config', autenticarJWT, async (req, res) => {

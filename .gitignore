@@ -1,1 +1,7 @@
 node_modules
+
+# Local Expo state and generated native/build output
+mobile/.expo/
+mobile/android/
+mobile/ios/
+mobile/dist/

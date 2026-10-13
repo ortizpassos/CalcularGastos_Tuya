@@ -185,11 +185,12 @@ function installRoutes(app, auth, getDb) {
         end <= start || end - start > 25 * 3600000) return res.status(400).json({ erro: 'Dia ou kitinete inválido.' });
     try {
       const db = getDb();
-      const segments = await db.collection('power_intervals').find({ usuario: req.usuario.email, kitinete: req.params.kitinete,
-        start: { $lt: end }, end: { $gt: start } }).toArray();
+      const config = await db.collection('tuya_config').findOne({ usuario: req.usuario.email });
+      const device = config?.[req.params.kitinete === 'maior' ? 'pessoa1' : 'pessoa2'];
+      if (!device?.deviceId) return res.status(400).json({ erro: 'Configure o dispositivo desta kitinete.' });
+      const readings = await tuya.readEnergyLogs(device.deviceId, start, end, device);
       const tariff = await latestTariff(db, req.usuario.email);
-      res.json({ tariff, hours: hourlyUsage(segments, start, end).map(h => ({ ...h,
-        cost: tariff != null && h.energyKwh != null ? h.energyKwh * tariff : null })) });
+      res.json({ tariff, readings, hours: [] });
     } catch { res.status(500).json({ erro: 'Falha ao consultar consumo diário.' }); }
   });
 }

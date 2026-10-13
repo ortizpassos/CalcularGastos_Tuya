@@ -9,7 +9,13 @@
       "package": "com.calculargastos.app"
     },
     "plugins": [
-      "@react-native-community/datetimepicker"
-    ]
+      "@react-native-community/datetimepicker",
+      "expo-font"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "88928c0e-85a8-4a6a-81cd-11b963c11e73"
+      }
+    }
   }
 }

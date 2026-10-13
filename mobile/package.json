@@ -6,23 +6,26 @@
   "scripts": {
     "start": "expo start",
     "start:clear": "expo start -c",
-    "android": "expo start --android",
+    "android": "expo run:android",
     "web": "expo start --web",
-    "export": "expo export"
+    "export": "expo export",
+    "ios": "expo run:ios"
   },
   "dependencies": {
     "@expo/metro-runtime": "~5.0.5",
     "@expo/vector-icons": "^14.1.0",
+    "@react-native-async-storage/async-storage": "^3.1.1",
     "@react-native-community/datetimepicker": "8.4.1",
     "expo": "~53.0.0",
     "expo-asset": "~11.1.5",
+    "expo-font": "~13.3.2",
     "expo-print": "~14.1.4",
     "expo-sharing": "~13.1.5",
     "expo-status-bar": "~2.2.3",
     "fbjs": "^3.0.5",
     "react": "19.0.0",
     "react-dom": "19.0.0",
-    "react-native": "0.79.2",
+    "react-native": "0.79.6",
     "react-native-web": "^0.20.0"
   }
 }

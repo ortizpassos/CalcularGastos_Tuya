@@ -165,6 +165,7 @@ async function readEnergyKwh(deviceId, options = {}) {
 
 module.exports = {
   readEnergyAt,
+  readEnergyLogs,
   getDeviceInfo: async deviceId => (await request('GET', `/v1.0/iot-03/devices/${encodeURIComponent(deviceId)}`)).result || {},
   fetchToken,
   getDeviceStatus,
@@ -204,4 +205,35 @@ async function readEnergyAt(deviceId, at, options = {}) {
     cursor = result.last_row_key;
   }
   throw new Error('Histórico extenso ou paginação incompleta. Não foi possível confirmar a leitura.');
+}
+
+async function readEnergyLogs(deviceId, start, end, options = {}) {
+  if (!deviceId) throw new Error('Device ID não configurado.');
+  const specification = await getDeviceSpecification(deviceId);
+  const statusSpecs = specification.status || [];
+  const code = options.dpCode || ENERGY_CODE_HINTS.find(candidate => statusSpecs.some(item => item.code === candidate));
+  if (!code) throw new Error('DP de energia não identificado no dispositivo.');
+  const spec = statusSpecs.find(item => item.code === code);
+  const meta = parseValues(spec?.values);
+  if (!options.divisor && !Number.isInteger(meta.scale)) throw new Error('Escala histórica de energia indisponível.');
+  const divisor = inferDivisor(spec, 0, options.divisor);
+  let cursor = '';
+  const readings = [];
+  for (let page = 0; page < 100; page++) {
+    const query = new URLSearchParams({ codes: code, start_time: String(+start), end_time: String(+end), size: '100' });
+    if (cursor) query.set('last_row_key', cursor);
+    const response = await request('GET', `/v1.0/iot-03/devices/${encodeURIComponent(deviceId)}/report-logs?${query}`);
+    const result = response.result || {};
+    for (const log of result.list || result.logs || []) {
+      const timestamp = Number(log.event_time);
+      const value = Number(log.value);
+      if (log.code === code && Number.isFinite(timestamp) && Number.isFinite(value) && value >= 0 && timestamp >= +start && timestamp <= +end) {
+        readings.push({ timestamp, kwh: value / divisor, dpCode: code });
+      }
+    }
+    if (!(result.has_more || result.has_next)) return readings.sort((a, b) => a.timestamp - b.timestamp);
+    if (!result.last_row_key || result.last_row_key === cursor) break;
+    cursor = result.last_row_key;
+  }
+  throw new Error('Histórico extenso ou paginação incompleta.');
 }

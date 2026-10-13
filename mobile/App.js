@@ -15,6 +15,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
@@ -27,7 +28,7 @@ const COLORS = {
   surfaceRaised: '#22272d',
   border: '#30363d',
   text: '#f5f7fa',
-  muted: '#c5ced8',
+  muted: '#f5f7fa',
   blue: '#58a6ff',
   orange: '#ff9f43',
   green: '#3ddc97',
@@ -35,6 +36,9 @@ const COLORS = {
 };
 
 const DEFAULT_NAMES = ['Karina', 'Luiza', 'Tatiana'];
+const LAST_EMAIL_KEY = '@calcular-gastos/last-email';
+const SESSION_KEY = '@calcular-gastos/session';
+const namesKey = email => `@calcular-gastos/names/${String(email).trim().toLowerCase()}`;
 
 function Button({ title, icon, onPress, variant = 'primary', disabled = false }) {
   return (
@@ -99,9 +103,58 @@ export default function App() {
   const [token, setToken] = useState(null);
   const [authMode, setAuthMode] = useState('login');
   const [names, setNames] = useState(DEFAULT_NAMES);
+  const [email, setEmail] = useState('');
   const [apiError, setApiError] = useState('');
   const [detailName, setDetailName] = useState(DEFAULT_NAMES[0]);
   const [detailType, setDetailType] = useState('water');
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const [sessionValue, lastEmail] = await Promise.all([
+          AsyncStorage.getItem(SESSION_KEY),
+          AsyncStorage.getItem(LAST_EMAIL_KEY),
+        ]);
+        if (!active) return;
+        if (lastEmail) setEmail(lastEmail);
+        if (!sessionValue) return;
+        const session = JSON.parse(sessionValue);
+        if (session?.token && session?.email) {
+          setToken(session.token);
+          setEmail(session.email);
+        }
+      } catch {
+        await AsyncStorage.removeItem(SESSION_KEY);
+      }
+    })();
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!token || !email) return;
+    (async () => {
+      try {
+        const config = await request('/api/usuario/configuracoes');
+        if (Array.isArray(config.nomes) && config.nomes.length === 3) {
+          setNames(config.nomes);
+          await AsyncStorage.setItem(namesKey(email), JSON.stringify(config.nomes));
+          return;
+        }
+      } catch { }
+      const value = await AsyncStorage.getItem(namesKey(email));
+      if (!value) return;
+      try {
+        const savedNames = JSON.parse(value);
+        if (Array.isArray(savedNames) && savedNames.length === 3) {
+          setNames(savedNames);
+          try {
+            await request('/api/usuario/configuracoes', { method: 'POST', body: JSON.stringify({ nomes: savedNames }) });
+          } catch { }
+        }
+      } catch { }
+    })();
+  }, [email, token]);
 
   useEffect(() => {
     if (screen !== 'home' && ['water', 'power', 'settings', 'details', 'resident-select'].includes(screen) && !token) setScreen('login');
@@ -134,7 +187,7 @@ export default function App() {
     return data;
   };
 
-  const handleAuth = async (email, senha) => {
+  const handleAuth = async (email, senha, keepLoggedIn) => {
     setApiError('');
     try {
       if (authMode === 'register') {
@@ -144,7 +197,12 @@ export default function App() {
         return;
       }
       const data = await request('/api/login', { method: 'POST', body: JSON.stringify({ email, senha }) });
+      const normalizedEmail = email.trim().toLowerCase();
       setToken(data.token);
+      setEmail(normalizedEmail);
+      await AsyncStorage.setItem(LAST_EMAIL_KEY, normalizedEmail);
+      if (keepLoggedIn) await AsyncStorage.setItem(SESSION_KEY, JSON.stringify({ token: data.token, email: normalizedEmail }));
+      else await AsyncStorage.removeItem(SESSION_KEY);
       setScreen('home');
     } catch (error) {
       setApiError(error.message);
@@ -153,11 +211,12 @@ export default function App() {
 
   const logout = () => {
     setToken(null);
+    AsyncStorage.removeItem(SESSION_KEY);
     setScreen('home');
   };
 
   if (screen === 'login') {
-    return <AuthScreen mode={authMode} error={apiError} onSubmit={handleAuth} onSwitch={() => { setApiError(''); setAuthMode(authMode === 'login' ? 'register' : 'login'); }} onBack={() => setScreen('home')} />;
+    return <AuthScreen mode={authMode} initialEmail={email} error={apiError} onSubmit={handleAuth} onSwitch={() => { setApiError(''); setAuthMode(authMode === 'login' ? 'register' : 'login'); }} onBack={() => setScreen('home')} />;
   }
 
   return (
@@ -167,7 +226,7 @@ export default function App() {
       {screen === 'resident-select' && <ResidentSelectScreen names={names} onBack={() => setScreen('home')} onSelect={(name) => { setDetailName(name); setDetailType('water'); setScreen('details'); }} />}
       {screen === 'water' && <CalculatorScreen type="water" names={names} request={request} onBack={() => setScreen('home')} onDetails={(name) => { setDetailName(name); setDetailType('water'); setScreen('details'); }} />}
       {screen === 'power' && <CalculatorScreen type="power" names={names} request={request} onBack={() => setScreen('home')} onDetails={(name) => { setDetailName(name); setDetailType('power'); setScreen('details'); }} />}
-      {screen === 'settings' && <SettingsScreen names={names} setNames={setNames} request={request} onBack={() => setScreen('home')} />}
+      {screen === 'settings' && <SettingsScreen names={names} setNames={setNames} email={email} request={request} onBack={() => setScreen('home')} />}
       {screen === 'details' && <DetailScreen name={detailName} type={detailType} names={names} request={request} onBack={() => setScreen('home')} onSwitchType={setDetailType} onOpenSettings={() => setScreen('settings')} />}
     </SafeAreaView>
   );
@@ -213,9 +272,10 @@ function ResidentSelectScreen({ names, onBack, onSelect }) {
   );
 }
 
-function AuthScreen({ mode, error, onSubmit, onSwitch, onBack }) {
-  const [email, setEmail] = useState('');
+function AuthScreen({ mode, initialEmail, error, onSubmit, onSwitch, onBack }) {
+  const [email, setEmail] = useState(initialEmail || '');
   const [senha, setSenha] = useState('');
+  const [keepLoggedIn, setKeepLoggedIn] = useState(true);
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="light" />
@@ -225,8 +285,9 @@ function AuthScreen({ mode, error, onSubmit, onSwitch, onBack }) {
           <View style={styles.formCard}>
             <Field label="E-mail" value={email} onChangeText={setEmail} placeholder="voce@email.com" keyboardType="email-address" />
             <Field label="Senha" value={senha} onChangeText={setSenha} placeholder="Sua senha" secureTextEntry />
+            {mode === 'login' ? <Pressable onPress={() => setKeepLoggedIn(value => !value)} style={styles.checkboxRow} accessibilityRole="checkbox" accessibilityState={{ checked: keepLoggedIn }}><Ionicons name={keepLoggedIn ? 'checkbox' : 'square-outline'} size={22} color={keepLoggedIn ? COLORS.green : COLORS.muted} /><Text style={styles.checkboxText}>Manter logado</Text></Pressable> : null}
             {error ? <Text style={styles.errorText}>{error}</Text> : null}
-            <Button icon={mode === 'login' ? 'arrow-forward' : 'checkmark'} title={mode === 'login' ? 'Entrar' : 'Cadastrar'} onPress={() => onSubmit(email, senha)} />
+            <Button icon={mode === 'login' ? 'arrow-forward' : 'checkmark'} title={mode === 'login' ? 'Entrar' : 'Cadastrar'} onPress={() => onSubmit(email, senha, keepLoggedIn)} />
           </View>
           <Pressable onPress={onSwitch} style={styles.switchLink}><Text style={styles.switchText}>{mode === 'login' ? 'Ainda não tenho uma conta' : 'Já tenho uma conta'}</Text></Pressable>
         </Screen>
@@ -560,13 +621,7 @@ function BathMonitorSection({ kitinete, name, request }) {
       <Text style={styles.helper}>Detecta corrente acima do limite. Outros aparelhos podem disparar a detecção: o consumo estimado é do circuito inteiro durante o período, não exclusivamente do chuveiro.</Text>
       <Text style={styles.helper}>O backend precisa permanecer ligado. Consultas aproximadamente a cada 30 segundos, sujeitas ao atraso de atualização da Tuya. Falhas interrompem a ocorrência; o tempo sem dados não é contado.</Text>
       <View style={styles.toggleRow}><Text style={styles.label}>Ativar monitoramento desta kitinete</Text><TouchableOpacity onPress={() => setConfig(value => ({ ...value, enabled: !value.enabled }))} style={[styles.toggle, config.enabled && styles.toggleOn]}><Text style={styles.toggleText}>{config.enabled ? 'SIM' : 'NÃO'}</Text></TouchableOpacity></View>
-      <Text style={styles.sectionLabel}>CAMPOS DE MEDIÇÃO TUYA</Text>
-      <Text style={styles.helper}>A escala e a unidade são lidas da especificação do dispositivo. Use divisores apenas se souber a conversão: valor bruto ÷ divisor = amperes ou watts. Se os campos não estiverem disponíveis, o monitor informará o problema.</Text>
       <Field label="Limite de corrente (A)" value={threshold} onChangeText={setThreshold} keyboardType="decimal-pad" />
-      <Field label="DP de corrente" value={currentCode} onChangeText={setCurrentCode} />
-      <Field label="Divisor para amperes (opcional)" value={currentDivisor} onChangeText={setCurrentDivisor} keyboardType="decimal-pad" />
-      <Field label="DP de potência" value={powerCode} onChangeText={setPowerCode} />
-      <Field label="Divisor para watts (opcional)" value={powerDivisor} onChangeText={setPowerDivisor} keyboardType="decimal-pad" />
       <Button icon="save-outline" title="Salvar monitoramento" onPress={save} />
       <Text style={styles.statusText}>{status}</Text>
       {message ? <Text style={styles.helper}>{message}</Text> : null}
@@ -581,7 +636,7 @@ function BathMonitorSection({ kitinete, name, request }) {
       <Text style={styles.helper}>Comparação por hora, apenas com pelo menos 90% do período monitorado e duas horas comparáveis. Horas sem dados não representam consumo zero. A coleta começa com o monitor ativo; não há recuperação retroativa.</Text>
       <Field label="Dia (AAAA-MM-DD)" value={day} onChangeText={setDay} />
       <Button icon="time-outline" title="Consultar dia" variant="secondary" onPress={loadDay} />
-      {dayData ? <View style={styles.reportBox}><View style={styles.tableHeader}><Text style={styles.tableHeaderText}>Horário</Text><Text style={styles.tableHeaderText}>Consumo estimado</Text><Text style={styles.tableHeaderText}>Custo estimado</Text><Text style={styles.tableHeaderText}>Tempo com dados</Text><Text style={styles.tableHeaderText}>Comparação</Text></View>{(dayData.hours || []).map((hour, index) => <View key={index} style={styles.tableRow}><Text style={styles.tableCell}>{new Date(hour.start).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} - {new Date(hour.end).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</Text><Text style={styles.tableCell}>{hour.energyKwh == null ? 'Sem dados' : `${parseNumber(hour.energyKwh).toFixed(2)} kWh`}</Text><Text style={styles.tableCell}>{hour.cost == null ? 'Indisponível' : `R$ ${parseNumber(hour.cost).toFixed(2)}`}</Text><Text style={styles.tableCell}>{formatDuration(hour.seconds)}</Text><Text style={styles.tableCell}>{hour.rank === 'maior' ? 'Maior consumo' : hour.rank === 'menor' ? 'Menor consumo' : hour.rank === 'igual' ? 'Consumos iguais' : hour.complete ? 'Comparável' : 'Dados insuficientes'}</Text></View>)}</View> : null}
+      {dayData ? <View style={styles.reportBox}><Text style={styles.cardTitle}>Leituras do log Tuya</Text>{(dayData.readings || []).map((reading, index) => <View key={`${reading.timestamp}-${index}`} style={styles.resultRow}><Text style={styles.resultName}>{formatDate(reading.timestamp)}</Text><Text style={styles.resultAmount}>{parseNumber(reading.kwh).toFixed(3)} kWh</Text></View>)}{!dayData.readings?.length ? <Text style={styles.helper}>Nenhuma leitura Tuya encontrada na data selecionada.</Text> : null}</View> : null}
     </View>
   );
 }
@@ -622,13 +677,21 @@ function ResultCard({ result, names, unit, accent }) {
   );
 }
 
-function SettingsScreen({ names, setNames, request, onBack }) {
+function SettingsScreen({ names, setNames, email, request, onBack }) {
   const [draft, setDraft] = useState(names);
   const [device1, setDevice1] = useState('');
   const [device2, setDevice2] = useState('');
   const save = async () => {
     if (draft.some(name => !name.trim())) return Alert.alert('Nomes obrigatórios', 'Informe os três moradores.');
-    setNames(draft.map(name => name.trim()));
+    const savedNames = draft.map(name => name.trim());
+    try {
+      await request('/api/usuario/configuracoes', { method: 'POST', body: JSON.stringify({ nomes: savedNames }) });
+      setNames(savedNames);
+      await AsyncStorage.setItem(namesKey(email), JSON.stringify(savedNames));
+    } catch (error) {
+      await AsyncStorage.setItem(namesKey(email), JSON.stringify(savedNames));
+      return Alert.alert('Nomes salvos localmente', `Não foi possível salvar no MongoDB: ${error.message}`);
+    }
     if (device1.trim() && device2.trim()) {
       try { await request('/api/tuya/config', { method: 'POST', body: JSON.stringify({ pessoa1: { deviceId: device1.trim() }, pessoa2: { deviceId: device2.trim() } }) }); } catch (error) { Alert.alert('Nomes salvos', `A configuração Tuya não foi salva: ${error.message}`); return; }
     }
@@ -686,13 +749,15 @@ const styles = StyleSheet.create({
   errorText: { color: COLORS.red, fontSize: 14, marginBottom: 15 },
   switchLink: { alignItems: 'center', padding: 22 },
   switchText: { color: COLORS.blue, fontSize: 14, fontWeight: '600' },
+  checkboxRow: { alignItems: 'center', flexDirection: 'row', gap: 9, marginBottom: 17 },
+  checkboxText: { color: COLORS.muted, fontSize: 14 },
   accentLine: { borderRadius: 4, height: 4, marginBottom: 18, width: 54 },
   resultCard: { backgroundColor: COLORS.surface, borderColor: COLORS.border, borderRadius: 18, borderWidth: 1, marginTop: 16, padding: 18 },
   resultHeading: { alignItems: 'center', flexDirection: 'row', gap: 8 },
   totalValue: { color: COLORS.text, fontSize: 28, fontWeight: '800', marginBottom: 4 },
   resultRow: { alignItems: 'center', borderTopColor: COLORS.border, borderTopWidth: 1, flexDirection: 'row', justifyContent: 'space-between', marginTop: 15, paddingTop: 15 },
   resultName: { color: COLORS.text, fontSize: 16, fontWeight: '700', marginBottom: 3 },
-  resultAmount: { fontSize: 17, fontWeight: '800' },
+  resultAmount: { color: COLORS.text, fontSize: 17, fontWeight: '800' },
   historyButton: { marginTop: 18 },
   dateButton: { marginBottom: 17 },
   detailActions: { gap: 10, marginBottom: 18 },
@@ -705,7 +770,7 @@ const styles = StyleSheet.create({
   tableHeader: { borderBottomColor: COLORS.border, borderBottomWidth: 1, gap: 4, paddingBottom: 8 },
   tableHeaderText: { color: COLORS.text, fontSize: 12, fontWeight: '800' },
   tableRow: { borderBottomColor: COLORS.border, borderBottomWidth: 1, gap: 3, paddingVertical: 9 },
-  tableCell: { color: COLORS.muted, fontSize: 12, lineHeight: 17 },
+  tableCell: { color: COLORS.text, fontSize: 12, lineHeight: 17 },
   modalBackdrop: { alignItems: 'center', backgroundColor: '#000000aa', flex: 1, justifyContent: 'center', padding: 22 },
   modalCard: { backgroundColor: COLORS.surface, borderColor: COLORS.border, borderRadius: 18, borderWidth: 1, padding: 20, width: '100%' },
 });

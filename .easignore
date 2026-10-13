@@ -1,0 +1,12 @@
+# EAS archives this repository from its Git root.
+node_modules/
+backend/.env
+
+# Regenerate native projects on EAS from app.json and config plugins.
+/mobile/android/
+/mobile/ios/
+
+# Exclude local state and previous exports, including tracked output.
+/mobile/.expo/
+/mobile/dist/
+*.log
