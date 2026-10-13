@@ -563,9 +563,14 @@ function BathMonitorSection({ kitinete, name, request }) {
   const [currentDivisor, setCurrentDivisor] = useState('');
   const [powerDivisor, setPowerDivisor] = useState('');
   const [reportDates, setReportDates] = useState([monthStart(), today()]);
+  const [reportDatePickerIndex, setReportDatePickerIndex] = useState(null);
   const [report, setReport] = useState(null);
   const [day, setDay] = useState(today());
   const [dayPickerVisible, setDayPickerVisible] = useState(false);
+  const [periodPicker, setPeriodPicker] = useState(null);
+  const [periodFrom, setPeriodFrom] = useState('00:00');
+  const [periodTo, setPeriodTo] = useState('23:59');
+  const [showAllDay, setShowAllDay] = useState(true);
   const [dayData, setDayData] = useState(null);
 
   const refresh = async (fill = false) => {
@@ -579,12 +584,23 @@ function BathMonitorSection({ kitinete, name, request }) {
         setCurrentDivisor(data.config?.currentDivisor ? String(data.config.currentDivisor) : '');
         setPowerDivisor(data.config?.powerDivisor ? String(data.config.powerDivisor) : '');
       }
-      const sample = data.config?.sample;
-      setStatus(!data.config?.enabled ? 'Monitoramento desativado.' : data.config?.error ? `Indisponível: ${data.config.error}` : sample ? `Corrente: ${parseNumber(sample.currentA).toFixed(2)} A | Potência: ${sample.powerW == null ? 'indisponível' : `${parseNumber(sample.powerW).toFixed(2)} W`} | ${formatDate(sample.at)}` : 'Aguardando uma leitura recente do dispositivo.');
+      let sample = data.config?.sample;
+      let live = false;
+      if (data.config?.enabled) {
+        try {
+          sample = await request(`/api/banhos/${kitinete}/leitura-atual`);
+          live = true;
+        } catch { }
+      }
+      setStatus(!data.config?.enabled ? 'Monitoramento desativado.' : data.config?.error && !sample ? `Indisponível: ${data.config.error}` : sample ? `${live ? 'Corrente ao vivo' : 'Última corrente'}: ${parseNumber(sample.currentA).toFixed(2)} A | Potência: ${sample.powerW == null ? 'indisponível' : `${parseNumber(sample.powerW).toFixed(2)} W`} | ${formatDate(sample.at)}` : 'Aguardando uma leitura recente do dispositivo.');
     } catch (error) { setStatus(`Não foi possível consultar o monitor: ${error.message}`); }
   };
 
-  useEffect(() => { refresh(true); }, [kitinete]);
+  useEffect(() => {
+    refresh(true);
+    const timer = setInterval(() => refresh(), 10000);
+    return () => clearInterval(timer);
+  }, [kitinete]);
 
   const save = async () => {
     try {
@@ -603,9 +619,16 @@ function BathMonitorSection({ kitinete, name, request }) {
     } catch (error) { setMessage(error.message); }
   };
 
+  const handleReportDateChange = (index, event, date) => {
+    setReportDatePickerIndex(null);
+    if (date && event?.type !== 'dismissed') setReportDates(items => items.map((item, itemIndex) => itemIndex === index ? localDate(date) : item));
+  };
+
   const loadDay = async () => {
     try {
-      const start = new Date(`${day}T00:00:00`); const end = new Date(start); end.setDate(end.getDate() + 1);
+      const start = new Date(`${day}T${showAllDay ? '00:00' : periodFrom}:00`);
+      const end = showAllDay ? new Date(new Date(`${day}T00:00:00`).getTime() + 86400000) : new Date(`${day}T${periodTo}:00`);
+      if (!showAllDay && end <= start) throw new Error('O horário final deve ser depois do horário inicial.');
       setDayData(await request(`/api/consumo-dia/${kitinete}?inicio=${encodeURIComponent(start.toISOString())}&fim=${encodeURIComponent(end.toISOString())}`));
     } catch (error) { setMessage(error.message); }
   };
@@ -613,6 +636,15 @@ function BathMonitorSection({ kitinete, name, request }) {
   const handleDayPickerChange = (event, date) => {
     setDayPickerVisible(false);
     if (date && event?.type !== 'dismissed') setDay(localDate(date));
+  };
+
+  const handlePeriodPickerChange = (event, date) => {
+    const target = periodPicker;
+    setPeriodPicker(null);
+    if (!date || event?.type === 'dismissed') return;
+    const value = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+    if (target === 'from') setPeriodFrom(value);
+    if (target === 'to') setPeriodTo(value);
   };
 
   const exportReport = async () => {
@@ -633,8 +665,11 @@ function BathMonitorSection({ kitinete, name, request }) {
       {message ? <Text style={styles.helper}>{message}</Text> : null}
       <Button icon="refresh-outline" title="Atualizar monitor" variant="secondary" onPress={() => refresh()} />
       <Text style={styles.cardTitle}>Relatório de banhos</Text>
-      <Field label="De" value={reportDates[0]} onChangeText={value => setReportDates(items => [value, items[1]])} placeholder="AAAA-MM-DD" />
-      <Field label="Até (inclusive)" value={reportDates[1]} onChangeText={value => setReportDates(items => [items[0], value])} placeholder="AAAA-MM-DD" />
+      <Text style={styles.label}>De</Text>
+      <Pressable onPress={() => setReportDatePickerIndex(0)} style={styles.datePickerField}><Ionicons name="calendar-outline" size={20} color={COLORS.blue} /><Text style={styles.datePickerText}>{reportDates[0]}</Text></Pressable>
+      <Text style={styles.label}>Até (inclusive)</Text>
+      <Pressable onPress={() => setReportDatePickerIndex(1)} style={styles.datePickerField}><Ionicons name="calendar-outline" size={20} color={COLORS.blue} /><Text style={styles.datePickerText}>{reportDates[1]}</Text></Pressable>
+      {reportDatePickerIndex !== null ? <DateTimePicker value={new Date(`${reportDates[reportDatePickerIndex]}T12:00:00`)} maximumDate={new Date()} mode="date" display={Platform.OS === 'ios' ? 'spinner' : 'default'} onChange={(event, date) => handleReportDateChange(reportDatePickerIndex, event, date)} /> : null}
       <Button icon="stats-chart-outline" title="Gerar relatório" variant="secondary" onPress={loadReport} />
       <Text style={styles.helper}>Inclui ocorrências encerradas ou interrompidas cujo início está no período selecionado. Energia calculada pela integração da potência ativa entre amostras. Sem potência disponível, o consumo aparece como parcial ou indisponível.</Text>
       {report ? <View style={styles.reportBox}><Text style={styles.helper}>{report.events?.length || 0} ocorrências | {parseNumber(report.totalKwh).toFixed(2)} kWh conhecidos</Text><View style={styles.tableHeader}><Text style={styles.tableHeaderText}>Kitinete / morador</Text><Text style={styles.tableHeaderText}>Início</Text><Text style={styles.tableHeaderText}>Fim</Text><Text style={styles.tableHeaderText}>Duração observada</Text><Text style={styles.tableHeaderText}>Consumo estimado</Text><Text style={styles.tableHeaderText}>Custo estimado</Text><Text style={styles.tableHeaderText}>Pico (A)</Text><Text style={styles.tableHeaderText}>Limite (A)</Text><Text style={styles.tableHeaderText}>Estado</Text></View>{(report.events || []).map((item, index) => <View key={index} style={styles.tableRow}><Text style={styles.tableCell}>{name} / {name}</Text><Text style={styles.tableCell}>{formatDate(item.start)}</Text><Text style={styles.tableCell}>{formatDate(item.end)}</Text><Text style={styles.tableCell}>{formatDuration(item.seconds)}</Text><Text style={styles.tableCell}>{item.energyKwh == null ? 'Indisponível' : `${parseNumber(item.energyKwh).toFixed(2)} kWh`}</Text><Text style={styles.tableCell}>{item.cost == null ? 'Indisponível' : `R$ ${parseNumber(item.cost).toFixed(2)}`}</Text><Text style={styles.tableCell}>{parseNumber(item.peakA).toFixed(2)}</Text><Text style={styles.tableCell}>{parseNumber(item.thresholdA).toFixed(2)}</Text><Text style={styles.tableCell}>{item.status === 'concluido' ? 'Concluído' : `Interrompido: ${item.reason || 'Intervalo sem dados'}`}</Text></View>)}<Button icon="download-outline" title="Exportar relatório" variant="secondary" onPress={exportReport} /></View> : null}
@@ -643,6 +678,9 @@ function BathMonitorSection({ kitinete, name, request }) {
       <Text style={styles.label}>Data da consulta</Text>
       <Pressable onPress={() => setDayPickerVisible(true)} style={styles.datePickerField}><Ionicons name="calendar-outline" size={20} color={COLORS.blue} /><Text style={styles.datePickerText}>{day}</Text></Pressable>
       {dayPickerVisible ? <DateTimePicker value={new Date(`${day}T12:00:00`)} maximumDate={new Date()} mode="date" display={Platform.OS === 'ios' ? 'spinner' : 'default'} onChange={handleDayPickerChange} /> : null}
+      <View style={styles.periodHeader}><Text style={styles.label}>Período do dia</Text><Pressable onPress={() => setShowAllDay(value => !value)} style={styles.periodToggle} accessibilityRole="checkbox" accessibilityState={{ checked: showAllDay }}><Ionicons name={showAllDay ? 'checkbox' : 'square-outline'} size={20} color={showAllDay ? COLORS.green : COLORS.muted} /><Text style={styles.periodToggleText}>Ver tudo</Text></Pressable></View>
+      {!showAllDay ? <View style={styles.periodFields}><View style={styles.periodField}><Text style={styles.label}>De</Text><Pressable onPress={() => setPeriodPicker('from')} style={styles.datePickerField}><Ionicons name="time-outline" size={20} color={COLORS.blue} /><Text style={styles.datePickerText}>{periodFrom}</Text></Pressable></View><View style={styles.periodField}><Text style={styles.label}>Até</Text><Pressable onPress={() => setPeriodPicker('to')} style={styles.datePickerField}><Ionicons name="time-outline" size={20} color={COLORS.blue} /><Text style={styles.datePickerText}>{periodTo}</Text></Pressable></View></View> : null}
+      {periodPicker ? <DateTimePicker value={new Date(`2026-01-01T${periodPicker === 'from' ? periodFrom : periodTo}:00`)} mode="time" display={Platform.OS === 'ios' ? 'spinner' : 'default'} onChange={handlePeriodPickerChange} /> : null}
       <Button icon="time-outline" title="Consultar dia" variant="secondary" onPress={loadDay} />
       {dayData ? <View style={styles.reportBox}><Text style={styles.cardTitle}>Relatório de {day}</Text><Text style={styles.helper}>Tarifa aplicada: {dayData.tariff == null ? 'indisponível' : `R$ ${parseNumber(dayData.tariff).toFixed(4)} / kWh`}</Text>{(dayData.hours || []).map((hour, index) => <View key={`${hour.start}-${index}`} style={[styles.hourRow, hour.rank === 'maior' && styles.hourRowHighlight]}><View><Text style={styles.resultName}>{new Date(hour.start).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} às {new Date(hour.end).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</Text>{hour.rank === 'maior' ? <Text style={styles.highestLabel}>Maior consumo do dia</Text> : null}</View><View><Text style={styles.resultAmount}>{hour.energyKwh == null ? 'Sem dados' : `${parseNumber(hour.energyKwh).toFixed(3)} kWh`}</Text><Text style={styles.hourCost}>{hour.cost == null ? 'R$ —' : `R$ ${parseNumber(hour.cost).toFixed(2)}`}</Text></View></View>)}{!dayData.hours?.some(hour => hour.energyKwh != null) ? <Text style={styles.helper}>Nenhuma leitura Tuya suficiente para calcular períodos nesta data.</Text> : null}</View> : null}
     </View>
@@ -779,6 +817,11 @@ const styles = StyleSheet.create({
   reportBox: { backgroundColor: COLORS.surfaceRaised, borderRadius: 12, gap: 8, marginVertical: 14, padding: 14 },
   datePickerField: { alignItems: 'center', backgroundColor: COLORS.surfaceRaised, borderColor: COLORS.border, borderRadius: 12, borderWidth: 1, flexDirection: 'row', gap: 10, marginBottom: 17, minHeight: 52, paddingHorizontal: 15 },
   datePickerText: { color: COLORS.text, fontSize: 16 },
+  periodHeader: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
+  periodToggle: { alignItems: 'center', flexDirection: 'row', gap: 7, marginBottom: 8 },
+  periodToggleText: { color: COLORS.muted, fontSize: 14 },
+  periodFields: { flexDirection: 'row', gap: 10 },
+  periodField: { flex: 1 },
   hourRow: { alignItems: 'center', borderTopColor: COLORS.border, borderTopWidth: 1, flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 12 },
   hourRowHighlight: { backgroundColor: '#17395a', borderRadius: 8, marginHorizontal: -6, paddingHorizontal: 6 },
   highestLabel: { color: COLORS.blue, fontSize: 12, fontWeight: '800', marginTop: 3 },

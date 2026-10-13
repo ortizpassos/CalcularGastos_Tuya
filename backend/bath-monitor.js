@@ -1,6 +1,6 @@
 const tuya = require('./tuya-client');
 const { randomUUID } = require('node:crypto');
-const INTERVAL = 30000;
+const INTERVAL = 10000;
 const specs = new Map();
 const CURRENT_CODE_HINTS = ['cur_current', 'current', 'electric_current', 'ele_current', 'current_a', 'current_ma', 'amps', 'amperage', 'ampere', 'rms_current'];
 const POWER_CODE_HINTS = ['cur_power', 'power', 'active_power', 'electric_power', 'ele_power', 'power_w', 'watt'];
@@ -169,8 +169,21 @@ function installRoutes(app, auth, getDb) {
       const db = getDb();
       const config = await db.collection('bath_configs').findOne(query);
       const active = await db.collection('bath_events').findOne({ ...query, status: 'ativo' });
-      res.json({ config: config || { enabled: false, thresholdA: 16, currentCode: 'cur_current', powerCode: 'cur_power' }, active, intervalSeconds: 30 });
+      res.json({ config: config || { enabled: false, thresholdA: 16, currentCode: 'cur_current', powerCode: 'cur_power' }, active, intervalSeconds: 10 });
     } catch { res.status(500).json({ erro: 'Falha ao carregar monitor.' }); }
+  });
+  app.get('/api/banhos/:kitinete/leitura-atual', auth, async (req, res) => {
+    if (!['maior', 'menor'].includes(req.params.kitinete)) return res.status(400).json({ erro: 'Kitinete inválida.' });
+    try {
+      const db = getDb();
+      const query = { usuario: req.usuario.email, kitinete: req.params.kitinete };
+      const config = await db.collection('bath_configs').findOne(query) || { currentCode: 'cur_current', powerCode: 'cur_power' };
+      const devices = await db.collection('tuya_config').findOne({ usuario: req.usuario.email });
+      const device = devices?.[req.params.kitinete === 'maior' ? 'pessoa1' : 'pessoa2'];
+      if (!device?.deviceId) return res.status(400).json({ erro: 'Configure o dispositivo desta kitinete.' });
+      const sample = await telemetry(device.deviceId, config);
+      res.json({ currentA: sample.currentA, powerW: sample.powerW, at: sample.at });
+    } catch (error) { res.status(502).json({ erro: error.message }); }
   });
   app.post('/api/banhos/:kitinete', auth, async (req, res) => {
     const b = req.body;
