@@ -585,17 +585,18 @@ function BathMonitorSection({ kitinete, name, request }) {
         setCurrentDivisor(data.config?.currentDivisor ? String(data.config.currentDivisor) : '');
         setPowerDivisor(data.config?.powerDivisor ? String(data.config.powerDivisor) : '');
       }
-      let sample = data.config?.sample;
-      let live = false;
+      let sample = null;
       let liveError = '';
       try {
         sample = await request(`/api/banhos/${kitinete}/leitura-atual`);
-        live = true;
+        if (typeof sample?.currentA !== 'number' || !Number.isFinite(sample.currentA) || sample.currentA < 0) {
+          throw new Error('O dispositivo não retornou uma leitura válida de corrente.');
+        }
       } catch (error) {
         sample = null;
         liveError = error.message;
       }
-      const liveStatus = sample ? `Corrente ao vivo: ${parseNumber(sample.currentA).toFixed(2)} A | Potência: ${sample.powerW == null ? 'indisponível' : `${parseNumber(sample.powerW).toFixed(2)} W`} | ${formatDate(sample.at)}` : liveError ? `Leitura ao vivo indisponível: ${liveError}` : data.config?.error ? `Indisponível: ${data.config.error}` : 'Aguardando uma leitura recente do dispositivo.';
+      const liveStatus = sample ? `Corrente ao vivo: ${sample.currentA.toFixed(2)} A | Potência: ${typeof sample.powerW !== 'number' || !Number.isFinite(sample.powerW) || sample.powerW < 0 ? 'indisponível' : `${sample.powerW.toFixed(2)} W`} | ${formatDate(sample.at)}` : liveError ? `Leitura ao vivo indisponível: ${liveError}` : data.config?.error ? `Indisponível: ${data.config.error}` : 'Aguardando uma leitura recente do dispositivo.';
       setStatus(`${!data.config?.enabled ? 'Monitoramento desativado. ' : ''}${liveStatus}`);
     } catch (error) { setStatus(`Não foi possível consultar o monitor: ${error.message}`); }
   };
