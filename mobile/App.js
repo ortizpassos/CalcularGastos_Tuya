@@ -554,6 +554,7 @@ function DetailScreen({ name, type, names, request, onBack, onSwitchType, onOpen
 }
 
 function BathMonitorSection({ kitinete, name, request }) {
+  const [diagnostics, setDiagnostics] = useState('');
   const [config, setConfig] = useState({});
   const [status, setStatus] = useState('Carregando monitor...');
   const [message, setMessage] = useState('');
@@ -615,6 +616,14 @@ function BathMonitorSection({ kitinete, name, request }) {
     } catch (error) { setMessage(error.message); }
   };
 
+  const inspectCurrent = async () => {
+    setDiagnostics('Consultando dispositivo...');
+    try {
+      const data = await request(`/api/banhos/${kitinete}/leitura-atual?diagnostico=1`);
+      setDiagnostics(data.diagnostics ? JSON.stringify(data, null, 2) : 'Atualize o backend para consultar o diagnóstico de corrente.');
+    } catch (error) { setDiagnostics(error.message); }
+  };
+
   const loadReport = async () => {
     try {
       const start = new Date(`${reportDates[0]}T00:00:00`);
@@ -671,6 +680,8 @@ function BathMonitorSection({ kitinete, name, request }) {
       <Text style={styles.statusText}>{status}</Text>
       {message ? <Text style={styles.helper}>{message}</Text> : null}
       <Button icon="refresh-outline" title="Atualizar monitor" variant="secondary" onPress={() => refresh()} />
+      <Button icon="search-outline" title="Diagnosticar corrente" variant="secondary" onPress={inspectCurrent} />
+      {diagnostics ? <Text selectable style={styles.helper}>{diagnostics}</Text> : null}
       <Text style={styles.cardTitle}>Relatório de banhos</Text>
       <Text style={styles.label}>De</Text>
       <Pressable onPress={() => setReportDatePickerIndex(0)} style={styles.datePickerField}><Ionicons name="calendar-outline" size={20} color={COLORS.blue} /><Text style={styles.datePickerText}>{reportDates[0]}</Text></Pressable>

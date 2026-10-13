@@ -104,7 +104,7 @@ function advance(active, sample, config) {
     peakA: sample.currentA, lastPowerW: sample.powerW, status: 'ativo' } };
 }
 
-async function telemetry(deviceId, config) {
+async function telemetry(deviceId, config, diagnostics = false) {
   const info = await tuya.getDeviceInfo(deviceId);
   if (info.online !== true) throw new Error('Dispositivo offline ou sem confirmação de conectividade.');
   let specification = specs.get(deviceId);
@@ -115,7 +115,20 @@ async function telemetry(deviceId, config) {
   const status = await tuya.getDeviceStatus(deviceId);
   const currentA = findMeasurement(status, specification.value, config.currentCode, config.currentDivisor, 'A', CURRENT_CODE_HINTS);
   if (currentA == null) throw new Error(`Corrente indisponível: nenhum DP de corrente com escala válida. DPs recebidos: ${status.map(item => item.code).join(', ')}. DPs especificados: ${(specification.value.status || []).map(item => item.code).join(', ')}`);
-  return { at: new Date(), currentA,
+  const details = diagnostics ? {
+    configuredCode: config.currentCode || null,
+    configuredDivisor: config.currentDivisor || null,
+    readings: status.map(item => {
+      const spec = (specification.value.status || []).find(entry => entry.code === item.code);
+      let metadata = spec?.values;
+      try { if (typeof metadata === 'string') metadata = JSON.parse(metadata); } catch { metadata = null; }
+      return { code: item.code, rawValue: item.value, unit: metadata?.unit ?? null,
+        scale: metadata?.scale ?? null,
+        currentA: measurement(status, specification.value, item.code,
+          item.code === config.currentCode ? config.currentDivisor : null, 'A') };
+    })
+  } : null;
+  return { at: new Date(), currentA, ...(details ? { diagnostics: details } : {}),
     powerW: findMeasurement(status, specification.value, config.powerCode, config.powerDivisor, 'W', POWER_CODE_HINTS) };
 }
 
@@ -190,8 +203,8 @@ function installRoutes(app, auth, getDb) {
       const devices = await db.collection('tuya_config').findOne({ usuario: req.usuario.email });
       const device = devices?.[req.params.kitinete === 'maior' ? 'pessoa1' : 'pessoa2'];
       if (!device?.deviceId) return res.status(400).json({ erro: 'Configure o dispositivo desta kitinete.' });
-      const sample = await telemetry(device.deviceId, config);
-      res.json({ currentA: sample.currentA, powerW: sample.powerW, at: sample.at });
+      const sample = await telemetry(device.deviceId, config, req.query?.diagnostico === '1');
+      res.json(sample);
     } catch (error) { res.status(502).json({ erro: error.message }); }
   });
   app.post('/api/banhos/:kitinete', auth, async (req, res) => {

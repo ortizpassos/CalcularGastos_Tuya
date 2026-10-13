@@ -62,6 +62,38 @@ test('device scale takes priority over an old divisor', () => {
   assert.equal(measurement(status, spec, 'cur_current', 1000, 'A'), 0.7);
 });
 
+test('live diagnostics expose zero raw current and alternate DPs for the authenticated device', async () => {
+  const tuya = require('./tuya-client');
+  const original = { getDeviceInfo: tuya.getDeviceInfo, getDeviceSpecification: tuya.getDeviceSpecification, getDeviceStatus: tuya.getDeviceStatus };
+  const calls = [];
+  const routes = {};
+  const app = { get: (path, ...handlers) => { routes[path] = handlers.at(-1); }, post() {} };
+  const queries = [];
+  const db = { collection: name => ({ findOne: async query => {
+    queries.push(query);
+    return name === 'bath_configs' ? { currentCode: 'cur_current' } : { pessoa1: { deviceId: 'diagnostic-device' } };
+  } }) };
+  tuya.getDeviceInfo = async id => { calls.push(id); return { online: true }; };
+  tuya.getDeviceSpecification = async () => ({ status: [
+    { code: 'cur_current', values: { scale: 0, unit: 'mA' } },
+    { code: 'electric_current', values: { scale: 1, unit: 'A' } }
+  ] });
+  tuya.getDeviceStatus = async () => [{ code: 'cur_current', value: 0 }, { code: 'electric_current', value: 185 }];
+  try {
+    installRoutes(app, () => {}, () => db);
+    let result;
+    const request = { params: { kitinete: 'maior' }, usuario: { email: 'test-user' }, query: { diagnostico: '1' } };
+    await routes['/api/banhos/:kitinete/leitura-atual'](request, { json: value => { result = value; } });
+    assert.equal(result.currentA, 0);
+    assert.deepEqual(result.diagnostics.readings[1], { code: 'electric_current', rawValue: 185, unit: 'A', scale: 1, currentA: 18.5 });
+    assert.equal(result.diagnostics.configuredCode, 'cur_current');
+    assert.ok(queries.every(query => query.usuario === 'test-user'));
+    assert.deepEqual(calls, ['diagnostic-device']);
+    await routes['/api/banhos/:kitinete/leitura-atual']({ ...request, query: {} }, { json: value => { result = value; } });
+    assert.equal(result.diagnostics, undefined);
+  } finally { Object.assign(tuya, original); }
+});
+
 test('all monitor endpoints require auth, reject superior and invalid threshold', async () => {
   const routes = {};
   const auth = () => {};
