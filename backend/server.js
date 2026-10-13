@@ -17,6 +17,10 @@ const tuya = require('./tuya-client');
 app.use(cors());
 app.use(express.json());
 
+app.get('/health', (_req, res) => {
+  res.json({ ok: true });
+});
+
 // Caminhos dos arquivos JSON para persistência simples (exceto leituras_luz, agora em MySQL)
 const ARQUIVO_HISTORICO_LUZ = path.join(__dirname, 'historico_luz.json');
 const ARQUIVO_LEITURAS_AGUA = path.join(__dirname, 'leituras_agua.json');
