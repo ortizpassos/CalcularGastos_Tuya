@@ -2,12 +2,17 @@
   "expo": {
     "name": "Calcular Gastos",
     "slug": "calcular-gastos",
-    "version": "1.0.1",
+    "icon": "./assets/icon.png",
+    "version": "1.0.3",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "android": {
       "package": "com.calculargastos.app",
-      "versionCode": 2
+      "versionCode": 4,
+      "adaptiveIcon": {
+        "backgroundColor": "#101214",
+        "foregroundImage": "./assets/icon.png"
+      }
     },
     "plugins": [
       "@react-native-community/datetimepicker",

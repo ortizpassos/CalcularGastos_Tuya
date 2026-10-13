@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { advance, measurement, findMeasurement, installRoutes, hourlyReadingUsage } = require('./bath-monitor');
+const { advance, measurement, findMeasurement, installRoutes, hourlyReadingUsage, accumulatedReadingUsage } = require('./bath-monitor');
 const config = { usuario: 'teste', kitinete: 'maior', deviceId: 'device', revision: 'v1', thresholdA: 16 };
 const sample = (seconds, currentA, powerW = 5000) => ({ at: new Date(seconds * 1000), currentA, powerW });
 
@@ -124,6 +124,12 @@ test('hourly Tuya readings calculate cost and highlight the highest period', () 
   assert.equal(hours[1].energyKwh, 3);
   assert.equal(hours[1].cost, 7.5);
   assert.equal(hours[1].rank, 'maior');
+});
+
+test('selected period total uses the accumulated readings around its boundaries', () => {
+  const start = new Date('2026-01-01T12:00:00Z');
+  const readings = [{ timestamp: +start - 1800000, kwh: 10 }, { timestamp: +start + 1800000, kwh: 11.5 }, { timestamp: +start + 2 * 3600000, kwh: 14 }];
+  assert.equal(accumulatedReadingUsage(readings, start, new Date(+start + 2 * 3600000)), 4);
 });
 
 test('selected kitinete is applied in DB query and response; missing tariff is not zero', async () => {

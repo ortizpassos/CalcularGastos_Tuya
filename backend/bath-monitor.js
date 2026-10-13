@@ -48,6 +48,15 @@ function hourlyReadingUsage(readings, start, end, tariff) {
   return hours.map(hour => ({ ...hour, rank: hour.energyKwh != null && hour.energyKwh === max && max >= 0 ? 'maior' : null }));
 }
 
+function accumulatedReadingUsage(readings, start, end) {
+  const sorted = readings.filter(reading => Number.isFinite(Number(reading.timestamp)) && Number.isFinite(Number(reading.kwh)))
+    .sort((a, b) => Number(a.timestamp) - Number(b.timestamp));
+  const first = sorted.filter(reading => Number(reading.timestamp) <= +start).pop();
+  const last = sorted.filter(reading => Number(reading.timestamp) <= +end).pop();
+  if (!first || !last || Number(last.timestamp) <= Number(first.timestamp)) return null;
+  return Math.max(0, Number(last.kwh) - Number(first.kwh));
+}
+
 function measurement(status, specification, code, divisor, unit) {
   const item = status.find(item => item.code === code);
   const raw = item && (typeof item.value === 'number' || (typeof item.value === 'string' && item.value.trim() !== '')) ? Number(item.value) : NaN;
@@ -105,7 +114,7 @@ async function telemetry(deviceId, config) {
   }
   const status = await tuya.getDeviceStatus(deviceId);
   const currentA = findMeasurement(status, specification.value, config.currentCode, config.currentDivisor, 'A', CURRENT_CODE_HINTS);
-  if (currentA == null) throw new Error(`Corrente indisponível: nenhum DP de corrente com escala válida. DPs recebidos: ${status.map(item => item.code).join(', ')}`);
+  if (currentA == null) throw new Error(`Corrente indisponível: nenhum DP de corrente com escala válida. DPs recebidos: ${status.map(item => item.code).join(', ')}. DPs especificados: ${(specification.value.status || []).map(item => item.code).join(', ')}`);
   return { at: new Date(), currentA,
     powerW: findMeasurement(status, specification.value, config.powerCode, config.powerDivisor, 'W', POWER_CODE_HINTS) };
 }
@@ -224,19 +233,23 @@ function installRoutes(app, auth, getDb) {
   });
   app.get('/api/consumo-dia/:kitinete', auth, async (req, res) => {
     const start = new Date(req.query.inicio), end = new Date(req.query.fim);
+    const totalStart = req.query.totalInicio ? new Date(req.query.totalInicio) : start;
+    const totalEnd = req.query.totalFim ? new Date(req.query.totalFim) : end;
     if (!['maior', 'menor'].includes(req.params.kitinete) || !Number.isFinite(+start) || !Number.isFinite(+end) ||
-        end <= start || end - start > 25 * 3600000) return res.status(400).json({ erro: 'Dia ou kitinete inválido.' });
+      end <= start || end - start > 25 * 3600000 || !Number.isFinite(+totalStart) || !Number.isFinite(+totalEnd) || totalEnd <= totalStart || totalEnd - totalStart > 25 * 3600000) return res.status(400).json({ erro: 'Dia ou kitinete inválido.' });
     try {
       const db = getDb();
       const config = await db.collection('tuya_config').findOne({ usuario: req.usuario.email });
       const device = config?.[req.params.kitinete === 'maior' ? 'pessoa1' : 'pessoa2'];
       if (!device?.deviceId) return res.status(400).json({ erro: 'Configure o dispositivo desta kitinete.' });
-      const readingsWithReference = await tuya.readEnergyLogs(device.deviceId, new Date(+start - 3600000), end, device);
+      const readingsWithReference = await tuya.readEnergyLogs(device.deviceId, new Date(Math.min(+start, +totalStart) - 3600000), new Date(Math.max(+end, +totalEnd)), device);
       const readings = readingsWithReference.filter(reading => reading.timestamp >= +start && reading.timestamp <= +end);
       const tariff = await latestTariff(db, req.usuario.email);
-      res.json({ tariff, readings, hours: hourlyReadingUsage(readingsWithReference, start, end, tariff) });
+      const periodKwh = accumulatedReadingUsage(readingsWithReference, start, end);
+      const totalKwh = accumulatedReadingUsage(readingsWithReference, totalStart, totalEnd);
+      res.json({ tariff, readings, periodKwh, periodCost: periodKwh != null && tariff != null ? periodKwh * tariff : null, totalKwh, totalCost: totalKwh != null && tariff != null ? totalKwh * tariff : null, hours: hourlyReadingUsage(readingsWithReference, start, end, tariff) });
     } catch { res.status(500).json({ erro: 'Falha ao consultar consumo diário.' }); }
   });
 }
 
-module.exports = { measurement, findMeasurement, advance, startMonitor, installRoutes, hourlyUsage, hourlyReadingUsage, latestTariff };
+module.exports = { measurement, findMeasurement, advance, startMonitor, installRoutes, hourlyUsage, hourlyReadingUsage, accumulatedReadingUsage, latestTariff };

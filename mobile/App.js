@@ -571,6 +571,7 @@ function BathMonitorSection({ kitinete, name, request }) {
   const [periodFrom, setPeriodFrom] = useState('00:00');
   const [periodTo, setPeriodTo] = useState('23:59');
   const [showAllDay, setShowAllDay] = useState(true);
+  const [showDayTotal, setShowDayTotal] = useState(false);
   const [dayData, setDayData] = useState(null);
 
   const refresh = async (fill = false) => {
@@ -586,13 +587,16 @@ function BathMonitorSection({ kitinete, name, request }) {
       }
       let sample = data.config?.sample;
       let live = false;
-      if (data.config?.enabled) {
-        try {
-          sample = await request(`/api/banhos/${kitinete}/leitura-atual`);
-          live = true;
-        } catch { }
+      let liveError = '';
+      try {
+        sample = await request(`/api/banhos/${kitinete}/leitura-atual`);
+        live = true;
+      } catch (error) {
+        sample = null;
+        liveError = error.message;
       }
-      setStatus(!data.config?.enabled ? 'Monitoramento desativado.' : data.config?.error && !sample ? `Indisponível: ${data.config.error}` : sample ? `${live ? 'Corrente ao vivo' : 'Última corrente'}: ${parseNumber(sample.currentA).toFixed(2)} A | Potência: ${sample.powerW == null ? 'indisponível' : `${parseNumber(sample.powerW).toFixed(2)} W`} | ${formatDate(sample.at)}` : 'Aguardando uma leitura recente do dispositivo.');
+      const liveStatus = sample ? `Corrente ao vivo: ${parseNumber(sample.currentA).toFixed(2)} A | Potência: ${sample.powerW == null ? 'indisponível' : `${parseNumber(sample.powerW).toFixed(2)} W`} | ${formatDate(sample.at)}` : liveError ? `Leitura ao vivo indisponível: ${liveError}` : data.config?.error ? `Indisponível: ${data.config.error}` : 'Aguardando uma leitura recente do dispositivo.';
+      setStatus(`${!data.config?.enabled ? 'Monitoramento desativado. ' : ''}${liveStatus}`);
     } catch (error) { setStatus(`Não foi possível consultar o monitor: ${error.message}`); }
   };
 
@@ -627,9 +631,11 @@ function BathMonitorSection({ kitinete, name, request }) {
   const loadDay = async () => {
     try {
       const start = new Date(`${day}T${showAllDay ? '00:00' : periodFrom}:00`);
-      const end = showAllDay ? new Date(new Date(`${day}T00:00:00`).getTime() + 86400000) : new Date(`${day}T${periodTo}:00`);
+      const totalStart = new Date(`${day}T00:00:00`);
+      const totalEnd = new Date(totalStart.getTime() + 86400000);
+      const end = showAllDay ? totalEnd : new Date(`${day}T${periodTo}:00`);
       if (!showAllDay && end <= start) throw new Error('O horário final deve ser depois do horário inicial.');
-      setDayData(await request(`/api/consumo-dia/${kitinete}?inicio=${encodeURIComponent(start.toISOString())}&fim=${encodeURIComponent(end.toISOString())}`));
+      setDayData(await request(`/api/consumo-dia/${kitinete}?inicio=${encodeURIComponent(start.toISOString())}&fim=${encodeURIComponent(end.toISOString())}&totalInicio=${encodeURIComponent(totalStart.toISOString())}&totalFim=${encodeURIComponent(totalEnd.toISOString())}`));
     } catch (error) { setMessage(error.message); }
   };
 
@@ -681,8 +687,9 @@ function BathMonitorSection({ kitinete, name, request }) {
       <View style={styles.periodHeader}><Text style={styles.label}>Período do dia</Text><Pressable onPress={() => setShowAllDay(value => !value)} style={styles.periodToggle} accessibilityRole="checkbox" accessibilityState={{ checked: showAllDay }}><Ionicons name={showAllDay ? 'checkbox' : 'square-outline'} size={20} color={showAllDay ? COLORS.green : COLORS.muted} /><Text style={styles.periodToggleText}>Ver tudo</Text></Pressable></View>
       {!showAllDay ? <View style={styles.periodFields}><View style={styles.periodField}><Text style={styles.label}>De</Text><Pressable onPress={() => setPeriodPicker('from')} style={styles.datePickerField}><Ionicons name="time-outline" size={20} color={COLORS.blue} /><Text style={styles.datePickerText}>{periodFrom}</Text></Pressable></View><View style={styles.periodField}><Text style={styles.label}>Até</Text><Pressable onPress={() => setPeriodPicker('to')} style={styles.datePickerField}><Ionicons name="time-outline" size={20} color={COLORS.blue} /><Text style={styles.datePickerText}>{periodTo}</Text></Pressable></View></View> : null}
       {periodPicker ? <DateTimePicker value={new Date(`2026-01-01T${periodPicker === 'from' ? periodFrom : periodTo}:00`)} mode="time" display={Platform.OS === 'ios' ? 'spinner' : 'default'} onChange={handlePeriodPickerChange} /> : null}
+      <Pressable onPress={() => setShowDayTotal(value => !value)} style={styles.periodToggle} accessibilityRole="checkbox" accessibilityState={{ checked: showDayTotal }}><Ionicons name={showDayTotal ? 'checkbox' : 'square-outline'} size={20} color={showDayTotal ? COLORS.green : COLORS.muted} /><Text style={styles.periodToggleText}>Ver consumo total do dia</Text></Pressable>
       <Button icon="time-outline" title="Consultar dia" variant="secondary" onPress={loadDay} />
-      {dayData ? <View style={styles.reportBox}><Text style={styles.cardTitle}>Relatório de {day}</Text><Text style={styles.helper}>Tarifa aplicada: {dayData.tariff == null ? 'indisponível' : `R$ ${parseNumber(dayData.tariff).toFixed(4)} / kWh`}</Text>{(dayData.hours || []).map((hour, index) => <View key={`${hour.start}-${index}`} style={[styles.hourRow, hour.rank === 'maior' && styles.hourRowHighlight]}><View><Text style={styles.resultName}>{new Date(hour.start).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} às {new Date(hour.end).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</Text>{hour.rank === 'maior' ? <Text style={styles.highestLabel}>Maior consumo do dia</Text> : null}</View><View><Text style={styles.resultAmount}>{hour.energyKwh == null ? 'Sem dados' : `${parseNumber(hour.energyKwh).toFixed(3)} kWh`}</Text><Text style={styles.hourCost}>{hour.cost == null ? 'R$ —' : `R$ ${parseNumber(hour.cost).toFixed(2)}`}</Text></View></View>)}{!dayData.hours?.some(hour => hour.energyKwh != null) ? <Text style={styles.helper}>Nenhuma leitura Tuya suficiente para calcular períodos nesta data.</Text> : null}</View> : null}
+      {dayData ? <View style={styles.reportBox}><Text style={styles.cardTitle}>Relatório de {day}</Text><Text style={styles.helper}>Tarifa aplicada: {dayData.tariff == null ? 'indisponível' : `R$ ${parseNumber(dayData.tariff).toFixed(4)} / kWh`}</Text>{!showAllDay ? <View style={styles.dayTotalBox}><Text style={styles.helper}>Consumo do período ({periodFrom} às {periodTo})</Text><Text style={styles.dayTotalValue}>{dayData.periodKwh == null ? 'Indisponível' : `${parseNumber(dayData.periodKwh).toFixed(3)} kWh`}</Text><Text style={styles.hourCost}>{dayData.periodCost == null ? 'Custo indisponível' : `R$ ${parseNumber(dayData.periodCost).toFixed(2)}`}</Text></View> : null}{showDayTotal ? <View style={styles.dayTotalBox}><Text style={styles.helper}>Consumo total do dia</Text><Text style={styles.dayTotalValue}>{dayData.totalKwh == null ? 'Indisponível' : `${parseNumber(dayData.totalKwh).toFixed(3)} kWh`}</Text><Text style={styles.hourCost}>{dayData.totalCost == null ? 'Custo indisponível' : `R$ ${parseNumber(dayData.totalCost).toFixed(2)}`}</Text></View> : null}{(dayData.hours || []).map((hour, index) => <View key={`${hour.start}-${index}`} style={[styles.hourRow, hour.rank === 'maior' && styles.hourRowHighlight]}><View><Text style={styles.resultName}>{new Date(hour.start).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} às {new Date(hour.end).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</Text>{hour.rank === 'maior' ? <Text style={styles.highestLabel}>Maior consumo do dia</Text> : null}</View><View><Text style={styles.resultAmount}>{hour.energyKwh == null ? 'Sem dados' : `${parseNumber(hour.energyKwh).toFixed(3)} kWh`}</Text><Text style={styles.hourCost}>{hour.cost == null ? 'R$ —' : `R$ ${parseNumber(hour.cost).toFixed(2)}`}</Text></View></View>)}{!dayData.hours?.some(hour => hour.energyKwh != null) ? <Text style={styles.helper}>Nenhuma leitura Tuya suficiente para calcular períodos nesta data.</Text> : null}</View> : null}
     </View>
   );
 }
@@ -826,6 +833,8 @@ const styles = StyleSheet.create({
   hourRowHighlight: { backgroundColor: '#17395a', borderRadius: 8, marginHorizontal: -6, paddingHorizontal: 6 },
   highestLabel: { color: COLORS.blue, fontSize: 12, fontWeight: '800', marginTop: 3 },
   hourCost: { color: COLORS.green, fontSize: 13, fontWeight: '700', marginTop: 3, textAlign: 'right' },
+  dayTotalBox: { backgroundColor: '#17395a', borderRadius: 10, marginBottom: 8, padding: 12 },
+  dayTotalValue: { color: COLORS.text, fontSize: 25, fontWeight: '800', marginTop: 3 },
   estimateBox: { backgroundColor: COLORS.surfaceRaised, borderRadius: 12, gap: 6, marginTop: 14, padding: 14 },
   tableHeader: { borderBottomColor: COLORS.border, borderBottomWidth: 1, gap: 4, paddingBottom: 8 },
   tableHeaderText: { color: COLORS.text, fontSize: 12, fontWeight: '800' },
