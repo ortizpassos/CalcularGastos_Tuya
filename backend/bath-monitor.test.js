@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { advance, measurement, installRoutes } = require('./bath-monitor');
+const { advance, measurement, installRoutes, hourlyReadingUsage } = require('./bath-monitor');
 const config = { usuario: 'teste', kitinete: 'maior', deviceId: 'device', revision: 'v1', thresholdA: 16 };
 const sample = (seconds, currentA, powerW = 5000) => ({ at: new Date(seconds * 1000), currentA, powerW });
 
@@ -97,6 +97,21 @@ test('hourly usage splits intervals at hour boundaries and never ranks missing h
   assert.equal(hours[2].seconds, 36);
   assert.equal(hours[3].seconds, 36);
   assert.equal(hourlyUsage([], start, at(1))[0].energyKwh, null);
+});
+
+test('hourly Tuya readings calculate cost and highlight the highest period', () => {
+  const start = new Date('2026-01-01T12:00:00Z');
+  const hours = hourlyReadingUsage([
+    { timestamp: +start - 3600000, kwh: 10 },
+    { timestamp: +start + 1800000, kwh: 11 },
+    { timestamp: +start + 3600000, kwh: 13 },
+    { timestamp: +start + 5400000, kwh: 16 }
+  ], start, new Date(+start + 2 * 3600000), 2.5);
+  assert.equal(hours[0].energyKwh, 1);
+  assert.equal(hours[0].cost, 2.5);
+  assert.equal(hours[1].energyKwh, 3);
+  assert.equal(hours[1].cost, 7.5);
+  assert.equal(hours[1].rank, 'maior');
 });
 
 test('selected kitinete is applied in DB query and response; missing tariff is not zero', async () => {

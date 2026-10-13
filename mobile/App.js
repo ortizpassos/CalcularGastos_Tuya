@@ -446,7 +446,7 @@ function CalculatorScreen({ type, names, request, onBack, onDetails }) {
         <Text style={styles.cardTitle}>Dados da fatura</Text>
         <Field label="Valor total (R$)" value={total} onChangeText={setTotal} placeholder="Ex.: 150,50" keyboardType="decimal-pad" />
         <Field label={`Consumo total (${unit})`} value={consumptionTotal} onChangeText={setConsumptionTotal} placeholder={`Ex.: ${isWater ? '25' : '350'}`} keyboardType="decimal-pad" />
-        {previous.every(value => value !== '' && Number.isFinite(parseNumber(value))) && !editingPrevious ? <View><Text style={styles.helper}>Leituras anteriores salvas: {previous[0]} e {previous[1]} {unit}</Text><Button icon="create-outline" title="Alterar leituras anteriores" variant="secondary" onPress={() => setPasswordModal(true)} /></View> : <View><Text style={styles.cardTitle}>Leituras anteriores</Text>{[0, 1].map(index => <Field key={index} label={`${names[index]} (${unit})`} value={previous[index]} onChangeText={value => setPrevious(items => items.map((item, itemIndex) => itemIndex === index ? value : item))} placeholder={`Leitura anterior em ${unit}`} keyboardType="decimal-pad" />)}</View>}
+        {previous.every(value => value !== '' && Number.isFinite(parseNumber(value))) && !editingPrevious ? <View><Text style={styles.helper}>Leituras anteriores salvas</Text>{[0, 1].map(index => <View key={index} style={styles.previousReading}><Text style={styles.previousReadingName}>{names[index]}</Text><Text style={styles.previousReadingValue}>{previous[index]} {unit}</Text></View>)}<Button icon="create-outline" title="Alterar leituras anteriores" variant="secondary" onPress={() => setPasswordModal(true)} /></View> : <View><Text style={styles.cardTitle}>Leituras anteriores</Text>{[0, 1].map(index => <Field key={index} label={`${names[index]} (${unit})`} value={previous[index]} onChangeText={value => setPrevious(items => items.map((item, itemIndex) => itemIndex === index ? value : item))} placeholder={`Leitura anterior em ${unit}`} keyboardType="decimal-pad" />)}</View>}
         {readingLoading ? <Text style={styles.statusText}>Buscando leituras no servidor...</Text> : null}
         {readingError ? <Text style={styles.errorText}>{readingError}</Text> : null}
         <Text style={styles.cardTitle}>Leituras atuais</Text>
@@ -565,6 +565,7 @@ function BathMonitorSection({ kitinete, name, request }) {
   const [reportDates, setReportDates] = useState([monthStart(), today()]);
   const [report, setReport] = useState(null);
   const [day, setDay] = useState(today());
+  const [dayPickerVisible, setDayPickerVisible] = useState(false);
   const [dayData, setDayData] = useState(null);
 
   const refresh = async (fill = false) => {
@@ -609,6 +610,11 @@ function BathMonitorSection({ kitinete, name, request }) {
     } catch (error) { setMessage(error.message); }
   };
 
+  const handleDayPickerChange = (event, date) => {
+    setDayPickerVisible(false);
+    if (date && event?.type !== 'dismissed') setDay(localDate(date));
+  };
+
   const exportReport = async () => {
     if (!report) return;
     const rows = (report.events || []).map(item => `<tr><td>${formatDate(item.start)}</td><td>${formatDate(item.end)}</td><td>${parseNumber(item.energyKwh).toFixed(2)} kWh</td><td>${parseNumber(item.peakA).toFixed(2)} A</td></tr>`).join('');
@@ -633,10 +639,12 @@ function BathMonitorSection({ kitinete, name, request }) {
       <Text style={styles.helper}>Inclui ocorrências encerradas ou interrompidas cujo início está no período selecionado. Energia calculada pela integração da potência ativa entre amostras. Sem potência disponível, o consumo aparece como parcial ou indisponível.</Text>
       {report ? <View style={styles.reportBox}><Text style={styles.helper}>{report.events?.length || 0} ocorrências | {parseNumber(report.totalKwh).toFixed(2)} kWh conhecidos</Text><View style={styles.tableHeader}><Text style={styles.tableHeaderText}>Kitinete / morador</Text><Text style={styles.tableHeaderText}>Início</Text><Text style={styles.tableHeaderText}>Fim</Text><Text style={styles.tableHeaderText}>Duração observada</Text><Text style={styles.tableHeaderText}>Consumo estimado</Text><Text style={styles.tableHeaderText}>Custo estimado</Text><Text style={styles.tableHeaderText}>Pico (A)</Text><Text style={styles.tableHeaderText}>Limite (A)</Text><Text style={styles.tableHeaderText}>Estado</Text></View>{(report.events || []).map((item, index) => <View key={index} style={styles.tableRow}><Text style={styles.tableCell}>{name} / {name}</Text><Text style={styles.tableCell}>{formatDate(item.start)}</Text><Text style={styles.tableCell}>{formatDate(item.end)}</Text><Text style={styles.tableCell}>{formatDuration(item.seconds)}</Text><Text style={styles.tableCell}>{item.energyKwh == null ? 'Indisponível' : `${parseNumber(item.energyKwh).toFixed(2)} kWh`}</Text><Text style={styles.tableCell}>{item.cost == null ? 'Indisponível' : `R$ ${parseNumber(item.cost).toFixed(2)}`}</Text><Text style={styles.tableCell}>{parseNumber(item.peakA).toFixed(2)}</Text><Text style={styles.tableCell}>{parseNumber(item.thresholdA).toFixed(2)}</Text><Text style={styles.tableCell}>{item.status === 'concluido' ? 'Concluído' : `Interrompido: ${item.reason || 'Intervalo sem dados'}`}</Text></View>)}<Button icon="download-outline" title="Exportar relatório" variant="secondary" onPress={exportReport} /></View> : null}
       <Text style={styles.cardTitle}>Consumo por hora</Text>
-      <Text style={styles.helper}>Comparação por hora, apenas com pelo menos 90% do período monitorado e duas horas comparáveis. Horas sem dados não representam consumo zero. A coleta começa com o monitor ativo; não há recuperação retroativa.</Text>
-      <Field label="Dia (AAAA-MM-DD)" value={day} onChangeText={setDay} />
+      <Text style={styles.helper}>Selecione um dia para consultar as leituras históricas da Tuya. O custo usa a tarifa da última conta de luz salva.</Text>
+      <Text style={styles.label}>Data da consulta</Text>
+      <Pressable onPress={() => setDayPickerVisible(true)} style={styles.datePickerField}><Ionicons name="calendar-outline" size={20} color={COLORS.blue} /><Text style={styles.datePickerText}>{day}</Text></Pressable>
+      {dayPickerVisible ? <DateTimePicker value={new Date(`${day}T12:00:00`)} maximumDate={new Date()} mode="date" display={Platform.OS === 'ios' ? 'spinner' : 'default'} onChange={handleDayPickerChange} /> : null}
       <Button icon="time-outline" title="Consultar dia" variant="secondary" onPress={loadDay} />
-      {dayData ? <View style={styles.reportBox}><Text style={styles.cardTitle}>Leituras do log Tuya</Text>{(dayData.readings || []).map((reading, index) => <View key={`${reading.timestamp}-${index}`} style={styles.resultRow}><Text style={styles.resultName}>{formatDate(reading.timestamp)}</Text><Text style={styles.resultAmount}>{parseNumber(reading.kwh).toFixed(3)} kWh</Text></View>)}{!dayData.readings?.length ? <Text style={styles.helper}>Nenhuma leitura Tuya encontrada na data selecionada.</Text> : null}</View> : null}
+      {dayData ? <View style={styles.reportBox}><Text style={styles.cardTitle}>Relatório de {day}</Text><Text style={styles.helper}>Tarifa aplicada: {dayData.tariff == null ? 'indisponível' : `R$ ${parseNumber(dayData.tariff).toFixed(4)} / kWh`}</Text>{(dayData.hours || []).map((hour, index) => <View key={`${hour.start}-${index}`} style={[styles.hourRow, hour.rank === 'maior' && styles.hourRowHighlight]}><View><Text style={styles.resultName}>{new Date(hour.start).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} às {new Date(hour.end).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</Text>{hour.rank === 'maior' ? <Text style={styles.highestLabel}>Maior consumo do dia</Text> : null}</View><View><Text style={styles.resultAmount}>{hour.energyKwh == null ? 'Sem dados' : `${parseNumber(hour.energyKwh).toFixed(3)} kWh`}</Text><Text style={styles.hourCost}>{hour.cost == null ? 'R$ —' : `R$ ${parseNumber(hour.cost).toFixed(2)}`}</Text></View></View>)}{!dayData.hours?.some(hour => hour.energyKwh != null) ? <Text style={styles.helper}>Nenhuma leitura Tuya suficiente para calcular períodos nesta data.</Text> : null}</View> : null}
     </View>
   );
 }
@@ -756,6 +764,9 @@ const styles = StyleSheet.create({
   resultHeading: { alignItems: 'center', flexDirection: 'row', gap: 8 },
   totalValue: { color: COLORS.text, fontSize: 28, fontWeight: '800', marginBottom: 4 },
   resultRow: { alignItems: 'center', borderTopColor: COLORS.border, borderTopWidth: 1, flexDirection: 'row', justifyContent: 'space-between', marginTop: 15, paddingTop: 15 },
+  previousReading: { alignItems: 'center', backgroundColor: '#172b46', borderLeftColor: COLORS.blue, borderLeftWidth: 4, borderRadius: 8, flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8, paddingHorizontal: 12, paddingVertical: 10 },
+  previousReadingName: { color: COLORS.text, fontSize: 15, fontWeight: '700' },
+  previousReadingValue: { color: COLORS.blue, fontSize: 20, fontWeight: '800' },
   resultName: { color: COLORS.text, fontSize: 16, fontWeight: '700', marginBottom: 3 },
   resultAmount: { color: COLORS.text, fontSize: 17, fontWeight: '800' },
   historyButton: { marginTop: 18 },
@@ -766,6 +777,12 @@ const styles = StyleSheet.create({
   toggleOn: { backgroundColor: COLORS.green, borderColor: COLORS.green },
   toggleText: { color: COLORS.text, fontSize: 12, fontWeight: '800' },
   reportBox: { backgroundColor: COLORS.surfaceRaised, borderRadius: 12, gap: 8, marginVertical: 14, padding: 14 },
+  datePickerField: { alignItems: 'center', backgroundColor: COLORS.surfaceRaised, borderColor: COLORS.border, borderRadius: 12, borderWidth: 1, flexDirection: 'row', gap: 10, marginBottom: 17, minHeight: 52, paddingHorizontal: 15 },
+  datePickerText: { color: COLORS.text, fontSize: 16 },
+  hourRow: { alignItems: 'center', borderTopColor: COLORS.border, borderTopWidth: 1, flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 12 },
+  hourRowHighlight: { backgroundColor: '#17395a', borderRadius: 8, marginHorizontal: -6, paddingHorizontal: 6 },
+  highestLabel: { color: COLORS.blue, fontSize: 12, fontWeight: '800', marginTop: 3 },
+  hourCost: { color: COLORS.green, fontSize: 13, fontWeight: '700', marginTop: 3, textAlign: 'right' },
   estimateBox: { backgroundColor: COLORS.surfaceRaised, borderRadius: 12, gap: 6, marginTop: 14, padding: 14 },
   tableHeader: { borderBottomColor: COLORS.border, borderBottomWidth: 1, gap: 4, paddingBottom: 8 },
   tableHeaderText: { color: COLORS.text, fontSize: 12, fontWeight: '800' },

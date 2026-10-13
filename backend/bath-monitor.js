@@ -29,6 +29,23 @@ function hourlyUsage(segments, start, end) {
     : h.energyKwh === max ? 'maior' : h.energyKwh === min ? 'menor' : null }));
 }
 
+function hourlyReadingUsage(readings, start, end, tariff) {
+  const sorted = readings.map(reading => ({ ...reading, timestamp: Number(reading.timestamp), kwh: Number(reading.kwh) }))
+    .filter(reading => Number.isFinite(reading.timestamp) && Number.isFinite(reading.kwh))
+    .sort((a, b) => a.timestamp - b.timestamp);
+  const hours = [];
+  for (let from = +start; from < +end; from += 3600000) {
+    const to = Math.min(from + 3600000, +end);
+    const before = sorted.filter(reading => reading.timestamp <= from).pop();
+    const last = sorted.filter(reading => reading.timestamp < to).pop();
+    const energyKwh = before && last && last.timestamp > before.timestamp ? Math.max(0, last.kwh - before.kwh) : null;
+    hours.push({ start: new Date(from), end: new Date(to), energyKwh,
+      cost: energyKwh != null && tariff != null ? energyKwh * tariff : null });
+  }
+  const max = Math.max(...hours.filter(hour => hour.energyKwh != null).map(hour => hour.energyKwh), -1);
+  return hours.map(hour => ({ ...hour, rank: hour.energyKwh != null && hour.energyKwh === max && max >= 0 ? 'maior' : null }));
+}
+
 function measurement(status, specification, code, divisor, unit) {
   const item = status.find(item => item.code === code);
   if (!item || typeof item.value !== 'number' || !Number.isFinite(item.value) || item.value < 0) return null;
@@ -188,11 +205,12 @@ function installRoutes(app, auth, getDb) {
       const config = await db.collection('tuya_config').findOne({ usuario: req.usuario.email });
       const device = config?.[req.params.kitinete === 'maior' ? 'pessoa1' : 'pessoa2'];
       if (!device?.deviceId) return res.status(400).json({ erro: 'Configure o dispositivo desta kitinete.' });
-      const readings = await tuya.readEnergyLogs(device.deviceId, start, end, device);
+      const readingsWithReference = await tuya.readEnergyLogs(device.deviceId, new Date(+start - 3600000), end, device);
+      const readings = readingsWithReference.filter(reading => reading.timestamp >= +start && reading.timestamp <= +end);
       const tariff = await latestTariff(db, req.usuario.email);
-      res.json({ tariff, readings, hours: [] });
+      res.json({ tariff, readings, hours: hourlyReadingUsage(readingsWithReference, start, end, tariff) });
     } catch { res.status(500).json({ erro: 'Falha ao consultar consumo diário.' }); }
   });
 }
 
-module.exports = { measurement, advance, startMonitor, installRoutes, hourlyUsage, latestTariff };
+module.exports = { measurement, advance, startMonitor, installRoutes, hourlyUsage, hourlyReadingUsage, latestTariff };
