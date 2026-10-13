@@ -345,6 +345,31 @@ app.post('/api/tuya/config', autenticarJWT, async (req, res) => {
       { $set: { pessoa1, pessoa2, atualizadoEm: new Date() } },
       { upsert: true }
     );
+
+    app.get('/api/luz/leituras-geral', autenticarJWT, async (req, res) => {
+      try {
+        const db = mongo.getDb();
+        const docs = await db.collection('leituras_gerais').find({ usuario: req.usuario.email }).sort({ data: -1 }).limit(1).toArray();
+        if (!docs.length) return res.json({ leitura: null, data: null });
+        res.json({ leitura: docs[0].leitura, data: docs[0].data });
+      } catch (err) {
+        console.error('Erro ao buscar leitura geral:', err);
+        res.status(500).json({ erro: 'Erro ao buscar leitura geral.' });
+      }
+    });
+
+    app.post('/api/luz/leituras-geral', autenticarJWT, async (req, res) => {
+      const leitura = Number(req.body.leitura);
+      if (!Number.isFinite(leitura) || leitura < 0) return res.status(400).json({ erro: 'A leitura geral deve ser um número válido.' });
+      try {
+        const db = mongo.getDb();
+        await db.collection('leituras_gerais').insertOne({ usuario: req.usuario.email, leitura, data: new Date() });
+        res.json({ mensagem: 'Leitura geral salva com sucesso.', leitura });
+      } catch (err) {
+        console.error('Erro ao salvar leitura geral:', err);
+        res.status(500).json({ erro: 'Erro ao salvar leitura geral.' });
+      }
+    });
     res.json({ mensagem: 'Configuração Tuya salva.', pessoa1, pessoa2 });
   } catch (err) {
     res.status(500).json({ erro: 'Erro ao salvar configuração Tuya.' });

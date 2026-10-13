@@ -413,13 +413,14 @@ function parseNumber(value) {
 }
 
 function HistoryCard({ history, unit, names, onExport, onDetails }) {
+  const latestByResident = names.map(name => history.find(item => item.nome === name));
   return (
     <View style={styles.resultCard}>
       <Text style={styles.cardTitle}>Histórico recente</Text>
-      {!history.length ? <Text style={styles.helper}>Nenhum cálculo salvo ainda.</Text> : history.slice(0, 1).map((item, index) => (
-        <TouchableOpacity key={`${item.data || 'registro'}-${index}`} style={styles.resultRow} onPress={() => onDetails(item.nome || names[0])} activeOpacity={0.7}>
-          <View><Text style={styles.resultName}>{item.nome || 'Morador'}</Text><Text style={styles.helper}>{parseNumber(item.consumo).toFixed(2)} {unit}</Text></View>
-          <Text style={styles.resultAmount}>R$ {parseNumber(item.valor).toFixed(2)}</Text>
+      {!history.length ? <Text style={styles.helper}>Nenhum cálculo salvo ainda.</Text> : latestByResident.map((item, index) => (
+        <TouchableOpacity key={names[index]} style={styles.resultRow} onPress={() => onDetails(names[index])} activeOpacity={0.7}>
+          <View><Text style={styles.resultName}>{names[index]}</Text><Text style={styles.helper}>{item ? `${parseNumber(item.consumo).toFixed(2)} ${unit}` : 'Sem leitura registrada'}</Text></View>
+          <Text style={styles.resultAmount}>{item ? `R$ ${parseNumber(item.valor).toFixed(2)}` : '—'}</Text>
         </TouchableOpacity>
       ))}
       <View style={styles.historyButton}><Button icon="document-text-outline" title="Exportar histórico PDF" variant="secondary" onPress={onExport} /></View>
@@ -432,12 +433,82 @@ function DetailScreen({ name, type, names, request, onBack, onSwitchType, onOpen
   const apiType = type === 'water' ? 'agua' : 'luz';
   const [records, setRecords] = useState([]);
   const [error, setError] = useState('');
+  const [untilToday, setUntilToday] = useState(null);
+  const [generalReading, setGeneralReading] = useState('');
+  const [previousGeneralReading, setPreviousGeneralReading] = useState(null);
+  const [generalLoading, setGeneralLoading] = useState(false);
 
   useEffect(() => {
-    request(`/api/${apiType}/historico`)
-      .then(items => setRecords(Array.isArray(items) ? items.filter(item => item.nome === name) : []))
-      .catch(loadError => setError(loadError.message));
+    let active = true;
+    (async () => {
+      try {
+        const allRecords = await request(`/api/${apiType}/historico`);
+        const residentRecords = Array.isArray(allRecords) ? allRecords.filter(item => item.nome === name) : [];
+        if (!active) return;
+        setRecords(residentRecords);
+        if (type !== 'power') return;
+        const residentIndex = names.indexOf(name);
+        const tariffRecord = Array.isArray(allRecords) ? allRecords.find(item => Number(item.consumoTotal) > 0 && Number(item.valorTotal) > 0) : null;
+        const tariff = tariffRecord ? Number(tariffRecord.valorTotal) / Number(tariffRecord.consumoTotal) : NaN;
+        if (residentIndex === 2) {
+          const general = await request('/api/luz/leituras-geral');
+          if (active) setPreviousGeneralReading(Number.isFinite(Number(general.leitura)) ? Number(general.leitura) : null);
+          return;
+        }
+        const [saved, live] = await Promise.all([request('/api/luz/leituras'), request('/api/luz/tuya/leituras')]);
+        const firstConsumption = Number(live.karina) - Number(saved.karina);
+        const secondConsumption = Number(live.luiza) - Number(saved.luiza);
+        const totalConsumption = tariffRecord ? Number(tariffRecord.consumoTotal) : NaN;
+        if (!Number.isFinite(firstConsumption) || !Number.isFinite(secondConsumption) || firstConsumption < 0 || secondConsumption < 0 || !Number.isFinite(tariff) || !Number.isFinite(totalConsumption)) {
+          setUntilToday({ unavailable: true, tariff });
+          return;
+        }
+        const previousReading = Number(residentIndex === 0 ? saved.karina : saved.luiza);
+        const currentReading = Number(residentIndex === 0 ? live.karina : live.luiza);
+        const consumption = residentIndex === 0 ? firstConsumption : secondConsumption;
+        setUntilToday({ consumption, value: consumption * tariff, tariff, previousReading, currentReading, totalConsumption, hasDevice: true });
+      } catch (loadError) {
+        if (active) setError(loadError.message);
+      }
+    })();
+    return () => { active = false; };
   }, [apiType, name]);
+
+  const calculateGeneralUntilToday = async () => {
+    const currentGeneral = parseNumber(generalReading);
+    if (!Number.isFinite(currentGeneral) || currentGeneral < 0) {
+      setError('Informe uma leitura válida do relógio geral.');
+      return;
+    }
+    if (previousGeneralReading == null) {
+      setError('Ainda não existe uma leitura geral anterior. Essa primeira leitura será salva como referência.');
+      try {
+        await request('/api/luz/leituras-geral', { method: 'POST', body: JSON.stringify({ leitura: currentGeneral }) });
+        setPreviousGeneralReading(currentGeneral);
+      } catch (saveError) { setError(saveError.message); }
+      return;
+    }
+    setGeneralLoading(true);
+    setError('');
+    try {
+      const [saved, live, allRecords] = await Promise.all([request('/api/luz/leituras'), request('/api/luz/tuya/leituras'), request('/api/luz/historico')]);
+      const tariffRecord = Array.isArray(allRecords) ? allRecords.find(item => Number(item.consumoTotal) > 0 && Number(item.valorTotal) > 0) : null;
+      const tariff = tariffRecord ? Number(tariffRecord.valorTotal) / Number(tariffRecord.consumoTotal) : NaN;
+      const firstConsumption = Number(live.karina) - Number(saved.karina);
+      const secondConsumption = Number(live.luiza) - Number(saved.luiza);
+      const totalConsumption = currentGeneral - previousGeneralReading;
+      if (!Number.isFinite(tariff) || !Number.isFinite(firstConsumption) || !Number.isFinite(secondConsumption) || firstConsumption < 0 || secondConsumption < 0 || totalConsumption < 0) throw new Error('Não foi possível calcular com as leituras atuais.');
+      const consumption = totalConsumption - firstConsumption - secondConsumption;
+      if (consumption < 0) throw new Error('Os consumos dos dispositivos superam a leitura do relógio geral.');
+      await request('/api/luz/leituras-geral', { method: 'POST', body: JSON.stringify({ leitura: currentGeneral }) });
+      setPreviousGeneralReading(currentGeneral);
+      setUntilToday({ consumption, value: consumption * tariff, tariff, totalConsumption, firstConsumption, secondConsumption, hasDevice: false });
+    } catch (calculateError) {
+      setError(calculateError.message);
+    } finally {
+      setGeneralLoading(false);
+    }
+  };
 
   const latest = records[0];
   return (
@@ -454,6 +525,7 @@ function DetailScreen({ name, type, names, request, onBack, onSwitchType, onOpen
         <Text style={styles.totalValue}>{latest ? `${parseNumber(latest.consumo).toFixed(2)} ${unit}` : '—'}</Text>
         <Text style={styles.helper}>{latest ? `R$ ${parseNumber(latest.valor).toFixed(2)} em ${formatDate(latest.data)}` : 'Ainda não há cálculos para este morador.'}</Text>
       </View>
+      {type === 'power' ? <View style={styles.formCard}><Text style={styles.cardTitle}>Consumo até hoje</Text>{names.indexOf(name) === 2 ? <View><Text style={styles.helper}>Informe a leitura atual do relógio geral para calcular a sobra desta kitinete.</Text><Text style={styles.helper}>Leitura geral anterior: {previousGeneralReading == null ? 'nenhuma' : `${previousGeneralReading.toFixed(2)} kWh`}</Text><Field label="Leitura atual do relógio geral (kWh)" value={generalReading} onChangeText={setGeneralReading} placeholder="Ex.: 1250,50" keyboardType="decimal-pad" /><Button disabled={generalLoading} icon="calculator-outline" title={generalLoading ? 'Calculando...' : 'Calcular sobra até hoje'} onPress={calculateGeneralUntilToday} />{untilToday ? <View style={styles.estimateBox}><Text style={styles.totalValue}>{untilToday.consumption.toFixed(2)} kWh</Text><Text style={styles.helper}>Total geral no período: {untilToday.totalConsumption.toFixed(2)} kWh</Text><Text style={styles.helper}>Menos dispositivos: {untilToday.firstConsumption.toFixed(2)} + {untilToday.secondConsumption.toFixed(2)} kWh</Text><Text style={styles.resultAmount}>Valor aproximado: R$ {untilToday.value.toFixed(2)}</Text><Text style={styles.helper}>Tarifa usada: R$ {untilToday.tariff.toFixed(4)} / kWh</Text></View> : null}</View> : untilToday ? <View><Text style={styles.totalValue}>{untilToday.consumption.toFixed(2)} kWh</Text><Text style={styles.helper}>Desde a última leitura ({untilToday.previousReading.toFixed(2)} até {untilToday.currentReading.toFixed(2)} kWh).</Text><Text style={styles.resultAmount}>Valor aproximado: R$ {untilToday.value.toFixed(2)}</Text><Text style={styles.helper}>Tarifa usada: R$ {untilToday.tariff.toFixed(4)} / kWh</Text></View> : <Text style={styles.statusText}>Calculando leitura até hoje...</Text>}</View> : null}
       <View style={styles.resultCard}>
         <Text style={styles.cardTitle}>Histórico individual</Text>
         {records.length ? records.map((item, index) => <View key={`${item.data || 'registro'}-${index}`} style={styles.resultRow}><View><Text style={styles.resultName}>{formatDate(item.data)}</Text><Text style={styles.helper}>{parseNumber(item.consumo).toFixed(2)} {unit}</Text></View><Text style={styles.resultAmount}>R$ {parseNumber(item.valor).toFixed(2)}</Text></View>) : <Text style={styles.helper}>Nenhum registro encontrado.</Text>}
@@ -672,6 +744,7 @@ const styles = StyleSheet.create({
   toggleOn: { backgroundColor: COLORS.green, borderColor: COLORS.green },
   toggleText: { color: COLORS.text, fontSize: 12, fontWeight: '800' },
   reportBox: { backgroundColor: COLORS.surfaceRaised, borderRadius: 12, gap: 8, marginVertical: 14, padding: 14 },
+  estimateBox: { backgroundColor: COLORS.surfaceRaised, borderRadius: 12, gap: 6, marginTop: 14, padding: 14 },
   tableHeader: { borderBottomColor: COLORS.border, borderBottomWidth: 1, gap: 4, paddingBottom: 8 },
   tableHeaderText: { color: COLORS.text, fontSize: 12, fontWeight: '800' },
   tableRow: { borderBottomColor: COLORS.border, borderBottomWidth: 1, gap: 3, paddingVertical: 9 },
