@@ -53,5 +53,11 @@ test('historical route scopes device and threshold to authenticated user', async
     assert.equal(result.events[0].seconds, 30);
     assert.ok(result.events[0].cost > 0);
     assert.ok(queries.every(q => q.usuario === 'resident'));
+    await routes['/api/banhos-relatorio']({ usuario: { email: 'resident' }, query: { fonte: 'tuya', thresholdA: '18', kitinete: 'menor', inicio: new Date(0).toISOString(), fim: new Date(60000).toISOString() } }, { json: value => { result = value; } });
+    assert.equal(result.thresholdA, 18);
+    assert.equal(result.events.length, 0);
+    let status;
+    await routes['/api/banhos-relatorio']({ usuario: { email: 'resident' }, query: { fonte: 'tuya', thresholdA: 'invalid', kitinete: 'menor', inicio: new Date(0).toISOString(), fim: new Date(60000).toISOString() } }, { status: code => { status = code; return { json() {} }; } });
+    assert.equal(status, 400);
   } finally { Object.assign(tuya, originals); }
 });

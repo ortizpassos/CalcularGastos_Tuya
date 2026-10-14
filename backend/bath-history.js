@@ -40,8 +40,9 @@ function reconstruct(logs, specification, code, config, readings, start, end) {
   });
 }
 
-async function historicalBaths(db, usuario, kitinete, start, end) {
+async function historicalBaths(db, usuario, kitinete, start, end, thresholdA) {
   const config = await db.collection('bath_configs').findOne({ usuario, kitinete }) || { thresholdA: 16, currentCode: 'cur_current' };
+  if (thresholdA != null) config.thresholdA = thresholdA;
   const devices = await db.collection('tuya_config').findOne({ usuario });
   const device = devices?.[kitinete === 'maior' ? 'pessoa1' : 'pessoa2'];
   if (!device?.deviceId) throw new Error('Configure o dispositivo desta kitinete.');
@@ -55,7 +56,7 @@ async function historicalBaths(db, usuario, kitinete, start, end) {
   try { readings = await tuya.readEnergyLogs(device.deviceId, new Date(+start - 90000), new Date(+end + 90000), device); }
   catch (error) { energyWarning = error.message; }
   return { events: reconstruct(logs, specification, code, { ...config, usuario, kitinete, deviceId: device.deviceId }, readings, start, end),
-    energyWarning, currentLogCount: logs.length };
+    energyWarning, currentLogCount: logs.length, thresholdA: config.thresholdA };
 }
 
 module.exports = { historicalBaths, reconstruct, energyAt };

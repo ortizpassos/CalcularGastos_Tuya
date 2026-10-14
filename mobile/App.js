@@ -562,7 +562,9 @@ function BathMonitorSection({ kitinete, name, request }) {
   const [powerCode, setPowerCode] = useState('cur_power');
   const [currentDivisor, setCurrentDivisor] = useState('');
   const [powerDivisor, setPowerDivisor] = useState('');
-  const [reportDates, setReportDates] = useState([monthStart(), today()]);
+  const [reportDates, setReportDates] = useState([today(), today()]);
+  const [reportMode, setReportMode] = useState('day');
+  const [reportSelectorVisible, setReportSelectorVisible] = useState(false);
   const [reportDatePickerIndex, setReportDatePickerIndex] = useState(null);
   const [report, setReport] = useState(null);
   const [day, setDay] = useState(today());
@@ -617,12 +619,13 @@ function BathMonitorSection({ kitinete, name, request }) {
 
   const loadReport = async () => {
     try {
-      const start = new Date(`${reportDates[0]}T00:00:00`);
-      const end = new Date(`${reportDates[1]}T00:00:00`); end.setDate(end.getDate() + 1);
+      const { start, end } = bathReportRange(reportMode, reportDates);
+      const limit = parseNumber(threshold);
+      if (!Number.isFinite(limit) || limit <= 0 || limit > 1000) throw new Error('Informe um limite de corrente válido.');
       if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end <= start) throw new Error('Confira as datas.');
       setReport(null);
       setMessage('Consultando histórico Tuya...');
-      setReport(await request(`/api/banhos-relatorio?fonte=tuya&kitinete=${kitinete}&inicio=${encodeURIComponent(start.toISOString())}&fim=${encodeURIComponent(end.toISOString())}`));
+      setReport(await request(`/api/banhos-relatorio?fonte=tuya&thresholdA=${limit}&kitinete=${kitinete}&inicio=${encodeURIComponent(start.toISOString())}&fim=${encodeURIComponent(end.toISOString())}`));
       setMessage('');
     } catch (error) { setMessage(error.message); }
   };
@@ -659,8 +662,8 @@ function BathMonitorSection({ kitinete, name, request }) {
 
   const exportReport = async () => {
     if (!report) return;
-    const rows = (report.events || []).map(item => `<tr><td>${formatDate(item.start)}</td><td>${formatDate(item.end)}</td><td>${formatDuration(item.seconds)}</td><td>${item.energyKwh == null ? 'Indisponível' : `${item.energyKwh.toFixed(3)} kWh`}</td><td>${parseNumber(item.peakA).toFixed(2)} A</td></tr>`).join('');
-    try { await Print.printAsync({ html: `<html><body><h1>Relatório de banhos - ${name}</h1><table border="1" cellpadding="6"><tr><th>Início</th><th>Fim</th><th>Duração estimada</th><th>Consumo</th><th>Pico</th></tr>${rows}</table></body></html>` }); } catch (error) { setMessage(error.message); }
+    const rows = (report.events || []).map(item => `<tr><td>${formatDate(item.start)}</td><td>${formatDate(item.end)}</td><td>${formatDuration(item.seconds)}</td><td>${item.energyKwh == null ? 'Indisponível' : `${item.energyKwh.toFixed(3)} kWh`}</td><td>${item.cost == null ? 'Indisponível' : `R$ ${item.cost.toFixed(2)}`}</td><td>${item.peakA.toFixed(2)} A</td></tr>`).join('');
+    try { await Print.printAsync({ html: `<html><body><h1>Relatório de banhos - ${name}</h1><p>Limite: ${report.thresholdA} A. Tarifa da última conta: ${report.tariff == null ? 'indisponível' : `R$ ${report.tariff.toFixed(4)} / kWh`}. Horários, duração e consumo estimados pelos logs Tuya.</p><table border="1" cellpadding="6"><tr><th>Início</th><th>Fim</th><th>Tempo acima do limite</th><th>Consumo</th><th>Valor</th><th>Pico</th></tr>${rows}</table></body></html>` }); } catch (error) { setMessage(error.message); }
   };
 
   return (
@@ -669,22 +672,29 @@ function BathMonitorSection({ kitinete, name, request }) {
       <Text style={styles.helper}>Detecta corrente acima do limite. Outros aparelhos podem disparar a detecção: o consumo estimado é do circuito inteiro durante o período, não exclusivamente do chuveiro.</Text>
       <Text style={styles.helper}>O backend precisa permanecer ligado. Consultas aproximadamente a cada 30 segundos, sujeitas ao atraso de atualização da Tuya. Falhas interrompem a ocorrência; o tempo sem dados não é contado.</Text>
       <View style={styles.toggleRow}><Text style={styles.label}>Ativar monitoramento desta kitinete</Text><TouchableOpacity onPress={() => setConfig(value => ({ ...value, enabled: !value.enabled }))} style={[styles.toggle, config.enabled && styles.toggleOn]}><Text style={styles.toggleText}>{config.enabled ? 'SIM' : 'NÃO'}</Text></TouchableOpacity></View>
-      <Field label="Limite de corrente (A)" value={threshold} onChangeText={setThreshold} keyboardType="decimal-pad" />
+      <Field label="Limite de corrente (A)" value={threshold} onChangeText={value => { setThreshold(value); setReport(null); }} keyboardType="decimal-pad" />
       <Button icon="save-outline" title="Salvar monitoramento" onPress={save} />
       <Text style={styles.statusText}>{status}</Text>
       {message ? <Text style={styles.helper}>{message}</Text> : null}
       <Button icon="refresh-outline" title="Atualizar monitor" variant="secondary" onPress={() => refresh()} />
       <Text style={styles.cardTitle}>Relatório de banhos</Text>
-      <Text style={styles.label}>De</Text>
-      <Pressable onPress={() => setReportDatePickerIndex(0)} style={styles.datePickerField}><Ionicons name="calendar-outline" size={20} color={COLORS.blue} /><Text style={styles.datePickerText}>{reportDates[0]}</Text></Pressable>
-      <Text style={styles.label}>Até (inclusive)</Text>
-      <Pressable onPress={() => setReportDatePickerIndex(1)} style={styles.datePickerField}><Ionicons name="calendar-outline" size={20} color={COLORS.blue} /><Text style={styles.datePickerText}>{reportDates[1]}</Text></Pressable>
-      {reportDatePickerIndex !== null ? <DateTimePicker value={new Date(`${reportDates[reportDatePickerIndex]}T12:00:00`)} maximumDate={new Date()} mode="date" display={Platform.OS === 'ios' ? 'spinner' : 'default'} onChange={(event, date) => handleReportDateChange(reportDatePickerIndex, event, date)} /> : null}
+      <Pressable accessibilityRole="button" accessibilityLabel="Selecionar período do relatório" onPress={() => setReportSelectorVisible(true)} style={styles.datePickerField}><Ionicons name="calendar-outline" size={20} color={COLORS.blue} /><Text style={[styles.datePickerText, { flex: 1 }]}>{bathReportLabel(reportMode, reportDates)}</Text><Ionicons name="chevron-down" size={20} color={COLORS.blue} /></Pressable>
+      <Modal visible={reportSelectorVisible} transparent animationType="fade" onRequestClose={() => { setReportSelectorVisible(false); setReportDatePickerIndex(null); }}>
+        <View style={styles.modalBackdrop}><View style={styles.modalCard}>
+          <Text style={styles.cardTitle}>Período do relatório</Text>
+          {[['day', 'Dia específico'], ['week', 'Semana (segunda a domingo)'], ['month', 'Mês completo'], ['custom', 'Período personalizado']].map(([value, label]) => <Pressable key={value} accessibilityRole="radio" accessibilityState={{ checked: reportMode === value }} onPress={() => { setReportMode(value); setReport(null); setReportDatePickerIndex(null); }} style={styles.periodToggle}><Ionicons name={reportMode === value ? 'radio-button-on' : 'radio-button-off'} size={20} color={COLORS.blue} /><Text style={styles.periodToggleText}>{label}</Text></Pressable>)}
+          <Text style={styles.label}>{reportMode === 'custom' ? 'De' : reportMode === 'day' ? 'Dia' : 'Escolha uma data da semana ou mês'}</Text>
+          <Pressable onPress={() => setReportDatePickerIndex(0)} style={styles.datePickerField}><Text style={styles.datePickerText}>{reportDates[0]}</Text></Pressable>
+          {reportMode === 'custom' ? <View><Text style={styles.label}>Até (inclusive)</Text><Pressable onPress={() => setReportDatePickerIndex(1)} style={styles.datePickerField}><Text style={styles.datePickerText}>{reportDates[1]}</Text></Pressable></View> : null}
+          {reportDatePickerIndex !== null ? <DateTimePicker value={new Date(`${reportDates[reportDatePickerIndex]}T12:00:00`)} maximumDate={new Date()} mode="date" display={Platform.OS === 'ios' ? 'spinner' : 'default'} onChange={(event, date) => { handleReportDateChange(reportDatePickerIndex, event, date); setReport(null); }} /> : null}
+          <Button icon="checkmark" title="Aplicar período" onPress={() => { setReportSelectorVisible(false); setReportDatePickerIndex(null); }} />
+        </View></View>
+      </Modal>
       <Button icon="stats-chart-outline" title="Gerar relatório" variant="secondary" onPress={loadReport} />
-      <Text style={styles.helper}>Consulta os logs Tuya usando o limite de corrente salvo. Horários e duração são estimados pelos registros disponíveis; intervalos sem dados interrompem a ocorrência. Consumo do circuito calculado pelas leituras de energia próximas ao início e ao fim. Sem leituras suficientes, o consumo fica indisponível.</Text>
+      <Text style={styles.helper}>Mostra somente ocorrências acima do limite informado. Tempo e consumo são estimados pelos logs Tuya. O valor usa a tarifa da última conta de luz salva.</Text>
       {report?.currentLogCount === 0 ? <Text style={styles.helper}>A Tuya não retornou registros de corrente neste período.</Text> : null}
       {report?.energyWarning ? <Text style={styles.helper}>Consumo indisponível: {report.energyWarning}</Text> : null}
-      {report ? <View style={styles.reportBox}><Text style={styles.helper}>{report.events?.length || 0} ocorrências | {parseNumber(report.totalKwh).toFixed(2)} kWh conhecidos</Text><View style={styles.tableHeader}><Text style={styles.tableHeaderText}>Kitinete / morador</Text><Text style={styles.tableHeaderText}>Início</Text><Text style={styles.tableHeaderText}>Fim</Text><Text style={styles.tableHeaderText}>Duração observada</Text><Text style={styles.tableHeaderText}>Consumo estimado</Text><Text style={styles.tableHeaderText}>Custo estimado</Text><Text style={styles.tableHeaderText}>Pico (A)</Text><Text style={styles.tableHeaderText}>Limite (A)</Text><Text style={styles.tableHeaderText}>Estado</Text></View>{(report.events || []).map((item, index) => <View key={index} style={styles.tableRow}><Text style={styles.tableCell}>{name} / {name}</Text><Text style={styles.tableCell}>{formatDate(item.start)}</Text><Text style={styles.tableCell}>{formatDate(item.end)}</Text><Text style={styles.tableCell}>{formatDuration(item.seconds)}</Text><Text style={styles.tableCell}>{item.energyKwh == null ? 'Indisponível' : `${parseNumber(item.energyKwh).toFixed(2)} kWh`}</Text><Text style={styles.tableCell}>{item.cost == null ? 'Indisponível' : `R$ ${parseNumber(item.cost).toFixed(2)}`}</Text><Text style={styles.tableCell}>{parseNumber(item.peakA).toFixed(2)}</Text><Text style={styles.tableCell}>{parseNumber(item.thresholdA).toFixed(2)}</Text><Text style={styles.tableCell}>{item.status === 'concluido' ? 'Concluído' : `Interrompido: ${item.reason || 'Intervalo sem dados'}`}</Text></View>)}<Button icon="download-outline" title="Exportar relatório" variant="secondary" onPress={exportReport} /></View> : null}
+      {report ? <BathReportResults report={report} onExport={exportReport} /> : null}
       <Text style={styles.cardTitle}>Consumo por hora</Text>
       <Text style={styles.helper}>Selecione um dia para consultar as leituras históricas da Tuya. O custo usa a tarifa da última conta de luz salva.</Text>
       <Text style={styles.label}>Data da consulta</Text>
@@ -698,6 +708,48 @@ function BathMonitorSection({ kitinete, name, request }) {
       {dayData ? <View style={styles.reportBox}><Text style={styles.cardTitle}>Relatório de {day}</Text><Text style={styles.helper}>Tarifa aplicada: {dayData.tariff == null ? 'indisponível' : `R$ ${parseNumber(dayData.tariff).toFixed(4)} / kWh`}</Text>{!showAllDay ? <View style={styles.dayTotalBox}><Text style={styles.helper}>Consumo do período ({periodFrom} às {periodTo})</Text><Text style={styles.dayTotalValue}>{dayData.periodKwh == null ? 'Indisponível' : `${parseNumber(dayData.periodKwh).toFixed(3)} kWh`}</Text><Text style={styles.hourCost}>{dayData.periodCost == null ? 'Custo indisponível' : `R$ ${parseNumber(dayData.periodCost).toFixed(2)}`}</Text></View> : null}{showDayTotal ? <View style={styles.dayTotalBox}><Text style={styles.helper}>Consumo total do dia</Text><Text style={styles.dayTotalValue}>{dayData.totalKwh == null ? 'Indisponível' : `${parseNumber(dayData.totalKwh).toFixed(3)} kWh`}</Text><Text style={styles.hourCost}>{dayData.totalCost == null ? 'Custo indisponível' : `R$ ${parseNumber(dayData.totalCost).toFixed(2)}`}</Text></View> : null}{(dayData.hours || []).map((hour, index) => <View key={`${hour.start}-${index}`} style={[styles.hourRow, hour.rank === 'maior' && styles.hourRowHighlight]}><View><Text style={styles.resultName}>{new Date(hour.start).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} às {new Date(hour.end).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</Text>{hour.rank === 'maior' ? <Text style={styles.highestLabel}>Maior consumo do dia</Text> : null}</View><View><Text style={styles.resultAmount}>{hour.energyKwh == null ? 'Sem dados' : `${parseNumber(hour.energyKwh).toFixed(3)} kWh`}</Text><Text style={styles.hourCost}>{hour.cost == null ? 'R$ —' : `R$ ${parseNumber(hour.cost).toFixed(2)}`}</Text></View></View>)}{!dayData.hours?.some(hour => hour.energyKwh != null) ? <Text style={styles.helper}>Nenhuma leitura Tuya suficiente para calcular períodos nesta data.</Text> : null}</View> : null}
     </View>
   );
+}
+
+function bathReportRange(mode, dates) {
+  const start = new Date(`${dates[0]}T00:00:00`);
+  let end = new Date(start);
+  if (mode === 'week') {
+    start.setDate(start.getDate() - (start.getDay() + 6) % 7);
+    end = new Date(start); end.setDate(end.getDate() + 7);
+  } else if (mode === 'month') {
+    start.setDate(1);
+    end = new Date(start); end.setMonth(end.getMonth() + 1);
+  } else if (mode === 'custom') {
+    end = new Date(`${dates[1]}T00:00:00`); end.setDate(end.getDate() + 1);
+  } else end.setDate(end.getDate() + 1);
+  return { start, end };
+}
+
+function bathReportLabel(mode, dates) {
+  const { start, end } = bathReportRange(mode, dates);
+  const last = new Date(end); last.setDate(last.getDate() - 1);
+  if (mode === 'day') return `Dia: ${start.toLocaleDateString('pt-BR')}`;
+  if (mode === 'month') return start.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  return `${mode === 'week' ? 'Semana' : 'Período'}: ${start.toLocaleDateString('pt-BR')} a ${last.toLocaleDateString('pt-BR')}`;
+}
+
+function BathReportResults({ report, onExport }) {
+  return <View style={styles.reportBox}>
+    <Text style={styles.cardTitle}>{report.events?.length || 0} ocorrências acima de {report.thresholdA} A</Text>
+    <Text style={styles.helper}>Tarifa da última conta: {report.tariff == null ? 'indisponível' : `R$ ${report.tariff.toFixed(4)} / kWh`}</Text>
+    {!report.events?.length && report.currentLogCount > 0 ? <Text style={styles.helper}>Nenhuma ocorrência acima do limite neste período.</Text> : null}
+    {(report.events || []).map((item, index) => <View key={item._id || index} style={styles.formCard}>
+      <Text style={styles.resultName}>{formatDate(item.start)} até {formatDate(item.end)}</Text>
+      <Text style={styles.helper}>Tempo acima de {item.thresholdA} A: {formatDuration(item.seconds)}</Text>
+      <Text style={styles.helper}>Pico de corrente: {item.peakA.toFixed(2)} A</Text>
+      <Text style={styles.resultAmount}>Consumo: {item.energyKwh == null ? 'indisponível' : `${item.energyKwh.toFixed(3)} kWh`}</Text>
+      <Text style={styles.resultAmount}>Valor: {item.cost == null ? 'indisponível' : `R$ ${item.cost.toFixed(2)}`}</Text>
+      {item.status !== 'concluido' ? <Text style={styles.helper}>Ocorrência parcial: {item.reason || 'Intervalo sem dados'}</Text> : null}
+    </View>)}
+    <Text style={styles.helper}>Consumo conhecido: {report.totalKwh.toFixed(3)} kWh</Text>
+    <Text style={styles.helper}>Valor conhecido: {report.tariff == null ? 'indisponível' : `R$ ${(report.totalKwh * report.tariff).toFixed(2)}`}</Text>
+    <Button icon="download-outline" title="Exportar relatório" variant="secondary" onPress={onExport} />
+  </View>;
 }
 
 function today() {

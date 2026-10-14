@@ -240,7 +240,9 @@ function installRoutes(app, auth, getDb) {
       let history = null;
       if (req.query.fonte === 'tuya') {
         if (!req.query.kitinete) return res.status(400).json({ erro: 'Selecione a kitinete para consultar logs Tuya.' });
-        history = await require('./bath-history').historicalBaths(getDb(), req.usuario.email, req.query.kitinete, start, end);
+        const limit = req.query.thresholdA == null ? undefined : Number(req.query.thresholdA);
+        if (limit != null && (!Number.isFinite(limit) || limit <= 0 || limit > 1000)) return res.status(400).json({ erro: 'Limite de corrente inválido.' });
+        history = await require('./bath-history').historicalBaths(getDb(), req.usuario.email, req.query.kitinete, start, end, limit);
       }
       const events = history ? history.events.sort((a, b) => +new Date(b.start) - +new Date(a.start)) : await getDb().collection('bath_events').find({ usuario: req.usuario.email,
         ...(req.query.kitinete ? { kitinete: req.query.kitinete } : {}),
@@ -255,6 +257,7 @@ function installRoutes(app, auth, getDb) {
       const tariff = await latestTariff(getDb(), req.usuario.email);
       res.json({ events: events.map(e => ({ ...e, cost: tariff != null && e.energySeconds > 0 ? e.energyKwh * tariff : null })),
         source: history ? 'tuya' : 'monitor', currentLogCount: history?.currentLogCount,
+        thresholdA: history?.thresholdA,
         energyWarning: history?.energyWarning,
         tariff, totals: req.query.kitinete ? { [req.query.kitinete]: totals[req.query.kitinete] } : totals,
         totalKwh: totals.maior.energyKwh + totals.menor.energyKwh });
