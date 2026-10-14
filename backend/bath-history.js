@@ -25,7 +25,7 @@ function reconstruct(logs, specification, code, config, readings, start, end) {
     const sample = { at: new Date(log.timestamp), currentA, powerW: null };
     let result = advance(active, sample, config);
     if (result.closed) {
-      events.push({ ...result.closed, reason: result.retry ? 'Intervalo sem dados de corrente' : null });
+      events.push({ ...result.closed, reason: result.closed.status === 'interrompido' ? 'Intervalo sem dados de corrente' : null });
       if (result.retry) result = advance(null, sample, config);
     }
     active = result.active;

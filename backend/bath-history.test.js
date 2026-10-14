@@ -8,8 +8,8 @@ function log(seconds, amps) {
   return { code: 'phase_a', timestamp: seconds * 1000, value: frame.toString('base64') };
 }
 test('historical phase_a detects selected threshold, duration and cumulative energy', () => {
-  const events = reconstruct([log(0, 16), log(10, 17), log(40, 20), log(70, 16)], {}, 'phase_a', config,
-    [{ timestamp: 10000, kwh: 100 }, { timestamp: 70000, kwh: 100.1 }], new Date(0), new Date(80000));
+  const events = reconstruct([log(0, 16), log(10, 17), log(40, 20), log(70, 15), log(101, 15)], {}, 'phase_a', config,
+    [{ timestamp: 10000, kwh: 100 }, { timestamp: 70000, kwh: 100.1 }], new Date(0), new Date(110000));
   assert.equal(events.length, 1);
   assert.equal(+events[0].start, 10000);
   assert.equal(+events[0].end, 70000);
@@ -23,6 +23,16 @@ test('gaps and missing ending are interrupted and missing energy stays null', ()
   const events = reconstruct([log(10, 17), log(40, 18), log(200, 20), log(230, 21)], {}, 'phase_a', config, [], new Date(0), new Date(300000));
   assert.equal(events.length, 2);
   assert.ok(events.every(e => e.status === 'interrompido' && e.seconds === 30 && e.energyKwh === null));
+});
+
+test('history groups short dips and excludes the final 30 second confirmation', () => {
+  const events = reconstruct([log(0, 20), log(10, 15), log(30, 20), log(40, 15), log(70, 15), log(71, 15)],
+    {}, 'phase_a', config, [{ timestamp: 0, kwh: 10 }, { timestamp: 40000, kwh: 10.1 }, { timestamp: 71000, kwh: 10.2 }], new Date(0), new Date(80000));
+  assert.equal(events.length, 1);
+  assert.equal(events[0].status, 'concluido');
+  assert.equal(events[0].seconds, 40);
+  assert.equal(+events[0].end, 40000);
+  assert.ok(Math.abs(events[0].energyKwh - 0.1) < 1e-10);
 });
 test('energy interpolation rejects sparse readings and meter resets', () => {
   assert.equal(energyAt([{ timestamp: 0, kwh: 10 }, { timestamp: 60000, kwh: 12 }], 30000), 11);

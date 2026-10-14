@@ -8,7 +8,10 @@ test('threshold is strictly greater than 16 A; duration and energy accumulate un
   assert.equal(advance(null, sample(0, 16), config).active, null);
   let state = advance(null, sample(0, 17), config).active;
   state = advance(state, sample(30, 20), config).active;
-  const result = advance(state, sample(60, 15, 0), config);
+  state = advance(state, sample(60, 15, 0), config).active;
+  assert.ok(state);
+  assert.ok(advance(state, sample(90, 15, 0), config).active);
+  const result = advance(state, sample(91, 15, 0), config);
   assert.equal(result.active, null);
   assert.equal(result.closed.seconds, 60);
   assert.equal(result.closed.energySeconds, 60);
@@ -29,7 +32,8 @@ test('gap never counts unknown duration or energy and requests a new event', () 
 test('unavailable power preserves time but never invents energy', () => {
   let state = advance(null, sample(0, 20, null), config).active;
   state = advance(state, sample(30, 20, 5000), config).active;
-  const result = advance(state, sample(60, 0, 0), config).closed;
+  state = advance(state, sample(60, 0, 0), config).active;
+  const result = advance(state, sample(91, 0, 0), config).closed;
   assert.equal(result.seconds, 60);
   assert.equal(result.energySeconds, 30);
   assert.ok(Math.abs(result.energyKwh - 5000 * 30 / 3600000) < 1e-10);
@@ -38,6 +42,36 @@ test('unavailable power preserves time but never invents energy', () => {
 test('event retains its original threshold across configuration changes', () => {
   const active = advance(null, sample(0, 20), config).active;
   assert.equal(advance(active, sample(30, 17), { ...config, thresholdA: 19 }).active.thresholdA, 16);
+});
+
+test('brief dips remain one bath; confirmation idle time and energy are excluded', () => {
+  let active = advance(null, sample(0, 20), config).active;
+  const id = active._id;
+  active = advance(active, sample(10, 15, 100), config).active;
+  active = advance(active, sample(30, 20), config).active;
+  assert.equal(active._id, id);
+  assert.equal(active.belowSince, null);
+  active = advance(active, sample(40, 15, 100), config).active;
+  active = advance(active, sample(70, 15, 100), config).active;
+  assert.ok(active);
+  const result = advance(active, sample(71, 15, 100), config);
+  assert.equal(result.closed._id, id);
+  assert.equal(result.closed.seconds, 40);
+  assert.equal(+result.closed.end, 40000);
+  assert.ok(Math.abs(result.closed.energyKwh - (5000 * 20 + 100 * 20) / 3600000) < 1e-10);
+});
+
+test('equality does not start a bath or confirm below threshold; new rise after confirmation starts a new bath', () => {
+  let active = advance(null, sample(0, 20), config).active;
+  active = advance(active, sample(10, 15), config).active;
+  active = advance(active, sample(30, 16), config).active;
+  assert.equal(active.belowSince, null);
+  active = advance(active, sample(40, 15), config).active;
+  const result = advance(active, sample(71, 20), config);
+  assert.equal(result.closed.status, 'concluido');
+  assert.equal(result.retry, true);
+  assert.equal(result.closed.seconds, 40);
+  assert.notEqual(advance(null, sample(71, 20), config).active._id, active._id);
 });
 
 test('DP conversion respects metadata unit and scale, including milliamps', () => {

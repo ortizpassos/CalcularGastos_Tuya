@@ -22,7 +22,7 @@ O consumo histórico usa a diferença de energia acumulada nas bordas de cada ev
 
 Documentação das unidades e escalas: https://developer.tuya.com/en/docs/iot/product-function-definition?id=K9tp14pijmeyh
 
-Uma ocorrência começa com a primeira amostra estritamente acima do limite e termina na primeira amostra menor ou igual. Tempo e kWh são estimados pela amostragem: a potência da amostra anterior é integrada até a próxima (`W × segundos / 3600000`). Não se utiliza tensão × corrente como se fosse potência ativa. A tela mostra segundos efetivamente processados; não avança o relógio sem amostras.
+Uma ocorrência começa com a primeira amostra estritamente acima do limite e s? tem o fim confirmado ap?s mais de 30 segundos abaixo do limite, usando o in?cio dessa queda como hor?rio final. Tempo e kWh são estimados pela amostragem: a potência da amostra anterior é integrada até a próxima (`W × segundos / 3600000`). Não se utiliza tensão × corrente como se fosse potência ativa. A tela mostra segundos efetivamente processados; não avança o relógio sem amostras.
 
 Isso representa consumo do circuito durante banhos prováveis, não identificação garantida do chuveiro nem consumo exclusivo dele. A Tuya pode devolver o último estado conhecido; a consulta e o indicador online não garantem que o dispositivo publicou uma medição nova naquele instante. Atrasos de publicação reduzem a precisão. Não é um medidor para faturamento individual exato.
 
@@ -31,3 +31,5 @@ Falha de consulta, mudança de dispositivo/configuração, desativação ou rein
 O relatório inclui ocorrências encerradas cujo início esteja no período selecionado (máximo 366 dias), com totais por kitinete, total conjunto e linhas individuais. Ocorrências em andamento ficam no monitor e entram no relatório quando encerradas. Os totais de energia são somente a parcela conhecida; linhas sem potência ou interrompidas são sinalizadas. Nomes seguem as configurações atuais do navegador. CSV inclui linhas e totais.
 
 Validação local: `node --test bath-monitor.test.js`. Testes não consultam dispositivos reais. Para validar a integração, ative o monitor, confira a corrente exibida com a medição do próprio equipamento e verifique uma transição acima/abaixo do limite e uma interrupção de conexão.
+
+A regra de encerramento ? compartilhada pelo monitor ao vivo e pela reconstru??o hist?rica. Quedas de at? 30 segundos continuam na mesma ocorr?ncia, incluindo seu tempo e consumo. Corrente igual ao limite n?o inicia uma ocorr?ncia nem conta como abaixo. A espera final de confirma??o fica fora do tempo e da energia. Sem registros que confirmem o fim, o hist?rico mostra uma ocorr?ncia parcial.

@@ -663,7 +663,7 @@ function BathMonitorSection({ kitinete, name, request }) {
   const exportReport = async () => {
     if (!report) return;
     const rows = (report.events || []).map(item => `<tr><td>${formatDate(item.start)}</td><td>${formatDate(item.end)}</td><td>${formatDuration(item.seconds)}</td><td>${item.energyKwh == null ? 'Indisponível' : `${item.energyKwh.toFixed(3)} kWh`}</td><td>${item.cost == null ? 'Indisponível' : `R$ ${item.cost.toFixed(2)}`}</td><td>${item.peakA.toFixed(2)} A</td></tr>`).join('');
-    try { await Print.printAsync({ html: `<html><body><h1>Relatório de banhos - ${name}</h1><p>Limite: ${report.thresholdA} A. Tarifa da última conta: ${report.tariff == null ? 'indisponível' : `R$ ${report.tariff.toFixed(4)} / kWh`}. Horários, duração e consumo estimados pelos logs Tuya.</p><table border="1" cellpadding="6"><tr><th>Início</th><th>Fim</th><th>Tempo acima do limite</th><th>Consumo</th><th>Valor</th><th>Pico</th></tr>${rows}</table></body></html>` }); } catch (error) { setMessage(error.message); }
+    try { await Print.printAsync({ html: `<html><body><h1>Relatório de banhos - ${name}</h1><p>Limite: ${report.thresholdA} A. Tarifa da última conta: ${report.tariff == null ? 'indisponível' : `R$ ${report.tariff.toFixed(4)} / kWh`}. Horários, duração e consumo estimados pelos logs Tuya.</p><table border="1" cellpadding="6"><tr><th>Início</th><th>Fim</th><th>Tempo do banho</th><th>Consumo</th><th>Valor</th><th>Pico</th></tr>${rows}</table></body></html>` }); } catch (error) { setMessage(error.message); }
   };
 
   return (
@@ -691,7 +691,7 @@ function BathMonitorSection({ kitinete, name, request }) {
         </View></View>
       </Modal>
       <Button icon="stats-chart-outline" title="Gerar relatório" variant="secondary" onPress={loadReport} />
-      <Text style={styles.helper}>Mostra somente ocorrências acima do limite informado. Tempo e consumo são estimados pelos logs Tuya. O valor usa a tarifa da última conta de luz salva.</Text>
+      <Text style={styles.helper}>O banho inicia acima do limite e termina após mais de 30 segundos abaixo dele. Quedas curtas continuam no mesmo banho; a espera final não entra no tempo nem no consumo. Valores estimados pelos logs Tuya e pela tarifa da última conta salva.</Text>
       {report?.currentLogCount === 0 ? <Text style={styles.helper}>A Tuya não retornou registros de corrente neste período.</Text> : null}
       {report?.energyWarning ? <Text style={styles.helper}>Consumo indisponível: {report.energyWarning}</Text> : null}
       {report ? <BathReportResults report={report} onExport={exportReport} /> : null}
@@ -740,7 +740,7 @@ function BathReportResults({ report, onExport }) {
     {!report.events?.length && report.currentLogCount > 0 ? <Text style={styles.helper}>Nenhuma ocorrência acima do limite neste período.</Text> : null}
     {(report.events || []).map((item, index) => <View key={item._id || index} style={styles.formCard}>
       <Text style={styles.resultName}>{formatDate(item.start)} até {formatDate(item.end)}</Text>
-      <Text style={styles.helper}>Tempo acima de {item.thresholdA} A: {formatDuration(item.seconds)}</Text>
+      <Text style={styles.helper}>Tempo do banho: {formatDuration(item.seconds)} | Limite: {item.thresholdA} A</Text>
       <Text style={styles.helper}>Pico de corrente: {item.peakA.toFixed(2)} A</Text>
       <Text style={styles.resultAmount}>Consumo: {item.energyKwh == null ? 'indisponível' : `${item.energyKwh.toFixed(3)} kWh`}</Text>
       <Text style={styles.resultAmount}>Valor: {item.cost == null ? 'indisponível' : `R$ ${item.cost.toFixed(2)}`}</Text>

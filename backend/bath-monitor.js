@@ -96,6 +96,12 @@ function advance(active, sample, config) {
   if (active) {
     const seconds = (sample.at - new Date(active.lastAt)) / 1000;
     if (seconds < 0 || seconds > 90) return { closed: { ...active, end: active.lastAt, status: 'interrompido' }, active: null, retry: true };
+    // Confirm the ending without adding the idle confirmation window to the bath.
+    if (active.belowSince && sample.at - new Date(active.belowSince) > 30000) {
+      const { belowSince, belowSnapshot, ...event } = active;
+      return { closed: { ...event, ...belowSnapshot, end: belowSince, lastAt: belowSince,
+        status: 'concluido' }, active: null, retry: sample.currentA > active.thresholdA };
+    }
     active = { ...active, seconds: active.seconds + seconds, lastAt: sample.at,
       peakA: Math.max(active.peakA, sample.currentA) };
     if (active.lastPowerW != null) {
@@ -103,7 +109,16 @@ function advance(active, sample, config) {
       active.energySeconds += seconds;
     }
     active.lastPowerW = sample.powerW;
-    if (sample.currentA <= active.thresholdA) return { closed: { ...active, end: sample.at, status: 'concluido' }, active: null };
+    if (sample.currentA < active.thresholdA) {
+      if (!active.belowSince) {
+        active.belowSince = sample.at;
+        active.belowSnapshot = { seconds: active.seconds, energyKwh: active.energyKwh,
+          energySeconds: active.energySeconds };
+      }
+    } else {
+      active.belowSince = null;
+      active.belowSnapshot = null;
+    }
     return { active };
   }
   if (sample.currentA <= config.thresholdA) return { active: null };
