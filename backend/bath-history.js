@@ -12,9 +12,17 @@ function energyAt(readings, time) {
 
 function reconstruct(logs, specification, code, config, readings, start, end) {
   let active = null;
+  let voltageSample = null;
   const events = [];
   for (const log of logs) {
-    if (log.timestamp < +start || log.timestamp >= +end || log.code !== code) continue;
+    if (log.timestamp < +start || log.timestamp >= +end) continue;
+    const logStatus = [{ code: log.code, value: log.value }];
+    const voltage = measurement(logStatus, specification, log.code, null, 'V');
+    if (log.code === code || ['cur_voltage', 'voltage_current', 'voltage', 'electric_voltage'].includes(log.code)) {
+      if (voltage != null && voltage > 0) voltageSample = { value: voltage, at: log.timestamp };
+      else if (log.code !== code || /^phase_[abc]$/.test(code)) voltageSample = null;
+    }
+    if (log.code !== code) continue;
     const currentA = measurement([{ code, value: log.value }], specification, code,
       code === config.currentCode ? config.currentDivisor : null, 'A');
     if (currentA == null) {
@@ -22,7 +30,8 @@ function reconstruct(logs, specification, code, config, readings, start, end) {
       active = null;
       continue;
     }
-    const sample = { at: new Date(log.timestamp), currentA, powerW: null };
+    const voltageV = voltageSample && log.timestamp - voltageSample.at <= 90000 ? voltageSample.value : null;
+    const sample = { at: new Date(log.timestamp), currentA, powerW: voltageV == null ? null : voltageV * currentA };
     let result = advance(active, sample, config);
     if (result.closed) {
       events.push({ ...result.closed, reason: result.closed.status === 'interrompido' ? 'Intervalo sem dados de corrente' : null });
@@ -35,8 +44,13 @@ function reconstruct(logs, specification, code, config, readings, start, end) {
     const first = energyAt(readings, +event.start), last = energyAt(readings, +new Date(event.end));
     const reset = readings.some((r, index) => index > 0 && r.timestamp > +event.start && r.timestamp <= +new Date(event.end) && r.kwh < readings[index - 1].kwh);
     const available = event.seconds > 0 && first != null && last != null && last >= first && !reset;
-    return { ...event, source: 'tuya', energyKwh: available ? last - first : null,
-      energySeconds: available ? event.seconds : 0 };
+    const estimated = event.seconds > 0 && event.energySeconds === event.seconds;
+    const partialEstimate = !available && event.energySeconds > 0;
+    return { ...event, source: 'tuya',
+      energyKwh: estimated || partialEstimate ? event.energyKwh : available ? last - first : null,
+      energySeconds: estimated || partialEstimate ? event.energySeconds : available ? event.seconds : 0,
+      energyMethod: estimated || partialEstimate ? 'voltage_current' : available ? 'meter_energy' : null,
+      assumedPowerFactor: estimated || partialEstimate ? 1 : null };
   });
 }
 
@@ -51,12 +65,13 @@ async function historicalBaths(db, usuario, kitinete, start, end, thresholdA) {
   const candidates = [...new Set([config.currentCode, ...CURRENT_CODE_HINTS, 'phase_a'].filter(Boolean))];
   const code = candidates.find(code => specs.some(item => item.code === code));
   if (!code) throw new Error('DP histórico de corrente não identificado.');
-  const logs = await tuya.readStatusLogs(device.deviceId, start, end, [code]);
+  const voltageCodes = ['cur_voltage', 'voltage_current', 'voltage', 'electric_voltage'].filter(code => specs.some(item => item.code === code));
+  const logs = await tuya.readStatusLogs(device.deviceId, start, end, [code, ...voltageCodes]);
   let readings = [], energyWarning = null;
   try { readings = await tuya.readEnergyLogs(device.deviceId, new Date(+start - 90000), new Date(+end + 90000), device); }
   catch (error) { energyWarning = error.message; }
   return { events: reconstruct(logs, specification, code, { ...config, usuario, kitinete, deviceId: device.deviceId }, readings, start, end),
-    energyWarning, currentLogCount: logs.length, thresholdA: config.thresholdA };
+    energyWarning, currentLogCount: logs.filter(log => log.code === code).length, thresholdA: config.thresholdA };
 }
 
 module.exports = { historicalBaths, reconstruct, energyAt };

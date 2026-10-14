@@ -60,12 +60,12 @@ function accumulatedReadingUsage(readings, start, end) {
 function measurement(status, specification, code, divisor, unit) {
   const item = status.find(item => item.code === code);
   // EARU phase frame: 2 bytes voltage, 3 bytes current (mA), 3 bytes power.
-  // Only decode current here: power scaling varies between meter models.
-  if (/^phase_[abc]$/.test(code) && unit === 'A') {
+  // Decode voltage/current only: power scaling varies between meter models.
+  if (/^phase_[abc]$/.test(code) && ['A', 'V'].includes(unit)) {
     if (typeof item?.value !== 'string' || !/^[A-Za-z0-9+/]{11}=$/.test(item.value)) return null;
     const frame = Buffer.from(item.value, 'base64');
     if (frame.length !== 8 || frame.toString('base64') !== item.value) return null;
-    return frame.readUIntBE(2, 3) / 1000;
+    return unit === 'V' ? frame.readUIntBE(0, 2) / 10 : frame.readUIntBE(2, 3) / 1000;
   }
   const raw = item && (typeof item.value === 'number' || (typeof item.value === 'string' && item.value.trim() !== '')) ? Number(item.value) : NaN;
   if (!item || !Number.isFinite(raw) || raw < 0) return null;
@@ -73,7 +73,7 @@ function measurement(status, specification, code, divisor, unit) {
   let values;
   try { values = typeof spec?.values === 'string' ? JSON.parse(spec.values) : spec?.values; } catch { return null; }
   if (values && Number.isInteger(values.scale) && values.scale >= 0 && values.scale <= 9) {
-    const factors = unit === 'A' ? { A: 1, mA: 0.001 } : { W: 1, kW: 1000 };
+    const factors = unit === 'A' ? { A: 1, mA: 0.001 } : unit === 'V' ? { V: 1, mV: 0.001 } : { W: 1, kW: 1000 };
     const factor = factors[values.unit];
     if (factor != null) return raw / 10 ** values.scale * factor;
   }

@@ -7,6 +7,32 @@ function log(seconds, amps) {
   frame.writeUIntBE(amps * 1000, 2, 3);
   return { code: 'phase_a', timestamp: seconds * 1000, value: frame.toString('base64') };
 }
+function electricalLog(seconds, amps, voltage) {
+  const entry = log(seconds, amps);
+  const frame = Buffer.from(entry.value, 'base64');
+  frame.writeUIntBE(Math.round(voltage * 10), 0, 2);
+  return { ...entry, value: frame.toString('base64') };
+}
+
+test('voltage and current integrate each bath interval, excluding final confirmation', () => {
+  const events = reconstruct([electricalLog(0, 20, 220), electricalLog(30, 25, 230),
+    electricalLog(60, 0, 220), electricalLog(91, 0, 220)], {}, 'phase_a', config, [], new Date(0), new Date(100000));
+  assert.equal(events.length, 1);
+  assert.equal(events[0].seconds, 60);
+  assert.equal(events[0].energySeconds, 60);
+  assert.equal(events[0].energyMethod, 'voltage_current');
+  assert.equal(events[0].assumedPowerFactor, 1);
+  assert.ok(Math.abs(events[0].energyKwh - (220 * 20 * 30 + 230 * 25 * 30) / 3600000) < 1e-10);
+});
+
+test('EARU voltage decode and partial voltage coverage never invent missing energy', () => {
+  const { measurement } = require('./bath-monitor');
+  assert.equal(measurement([{ code: 'phase_a', value: 'CFEABN0AAKc=' }], {}, 'phase_a', null, 'V'), 212.9);
+  const events = reconstruct([electricalLog(0, 20, 220), log(30, 25), log(60, 0), log(91, 0)], {}, 'phase_a', config, [], new Date(0), new Date(100000));
+  assert.equal(events[0].energySeconds, 30);
+  assert.equal(events[0].seconds, 60);
+  assert.ok(Math.abs(events[0].energyKwh - 220 * 20 * 30 / 3600000) < 1e-10);
+});
 test('historical phase_a detects selected threshold, duration and cumulative energy', () => {
   const events = reconstruct([log(0, 16), log(10, 17), log(40, 20), log(70, 15), log(101, 15)], {}, 'phase_a', config,
     [{ timestamp: 10000, kwh: 100 }, { timestamp: 70000, kwh: 100.1 }], new Date(0), new Date(110000));

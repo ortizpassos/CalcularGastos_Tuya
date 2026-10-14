@@ -693,7 +693,7 @@ function BathMonitorSection({ kitinete, name, request }) {
       <Button icon="stats-chart-outline" title="Gerar relatório" variant="secondary" onPress={loadReport} />
       <Text style={styles.helper}>O banho inicia acima do limite e termina após mais de 30 segundos abaixo dele. Quedas curtas continuam no mesmo banho; a espera final não entra no tempo nem no consumo. Valores estimados pelos logs Tuya e pela tarifa da última conta salva.</Text>
       {report?.currentLogCount === 0 ? <Text style={styles.helper}>A Tuya não retornou registros de corrente neste período.</Text> : null}
-      {report?.energyWarning ? <Text style={styles.helper}>Consumo indisponível: {report.energyWarning}</Text> : null}
+      {report?.energyWarning && report.events?.some(item => item.energyKwh == null) ? <Text style={styles.helper}>Leituras de energia indisponíveis: {report.energyWarning}</Text> : null}
       {report ? <BathReportResults report={report} onExport={exportReport} /> : null}
       <Text style={styles.cardTitle}>Consumo por hora</Text>
       <Text style={styles.helper}>Selecione um dia para consultar as leituras históricas da Tuya. O custo usa a tarifa da última conta de luz salva.</Text>
@@ -744,6 +744,7 @@ function BathReportResults({ report, onExport }) {
       <Text style={styles.helper}>Pico de corrente: {item.peakA.toFixed(2)} A</Text>
       <Text style={styles.resultAmount}>Consumo: {item.energyKwh == null ? 'indisponível' : `${item.energyKwh.toFixed(3)} kWh`}</Text>
       <Text style={styles.resultAmount}>Valor: {item.cost == null ? 'indisponível' : `R$ ${item.cost.toFixed(2)}`}</Text>
+      {item.energyMethod === 'voltage_current' ? <Text style={styles.helper}>Estimativa por tensão × corrente, com fator de potência 1.{item.energySeconds < item.seconds ? ` Dados disponíveis em ${formatDuration(item.energySeconds)} do banho.` : ''}</Text> : null}
       {item.status !== 'concluido' ? <Text style={styles.helper}>Ocorrência parcial: {item.reason || 'Intervalo sem dados'}</Text> : null}
     </View>)}
     <Text style={styles.helper}>Consumo conhecido: {report.totalKwh.toFixed(3)} kWh</Text>
