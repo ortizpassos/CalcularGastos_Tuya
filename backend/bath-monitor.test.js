@@ -62,6 +62,21 @@ test('device scale takes priority over an old divisor', () => {
   assert.equal(measurement(status, spec, 'cur_current', 1000, 'A'), 0.7);
 });
 
+test('EARU phase_a decodes circuit current instead of leakage current', () => {
+  const status = [{ code: 'phase_a', value: 'CFEABN0AAKc=' }, { code: 'leakage_current', value: 0 }];
+  const spec = { status: [{ code: 'leakage_current', values: { scale: 0, unit: 'mA' } }] };
+  assert.equal(findMeasurement(status, spec, 'cur_current', null, 'A', ['cur_current']), 1.245);
+  assert.equal(findMeasurement(status.slice(1), spec, 'cur_current', null, 'A', ['cur_current']), null);
+  assert.equal(measurement(status, spec, 'phase_a', null, 'W'), null);
+  for (const value of ['', 'invalid', 'CFEABN0AAKc=extra', 'AAAA', 'CFEABN0AAKd=']) {
+    assert.equal(measurement([{ code: 'phase_a', value }], {}, 'phase_a', null, 'A'), null);
+  }
+  assert.equal(measurement([{ code: 'phase_a', value: 'AAAAAAAAAAA=' }], {}, 'phase_a', null, 'A'), 0);
+  assert.equal(findMeasurement([{ code: 'cur_current', value: 0 }, ...status],
+    { status: [...spec.status, { code: 'cur_current', values: { scale: 0, unit: 'mA' } }] },
+    'cur_current', null, 'A', ['cur_current']), 0);
+});
+
 test('live diagnostics expose zero raw current and alternate DPs for the authenticated device', async () => {
   const tuya = require('./tuya-client');
   const original = { getDeviceInfo: tuya.getDeviceInfo, getDeviceSpecification: tuya.getDeviceSpecification, getDeviceStatus: tuya.getDeviceStatus };

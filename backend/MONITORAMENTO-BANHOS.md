@@ -14,6 +14,8 @@ O ciclo consulta conectividade, especificação (cache de uma hora) e status Tuy
 
 São usados `cur_current` e `cur_power` por padrão. A conversão exige unidade e escala da especificação. Outros códigos e divisores podem ser informados na tela. Corrente: A ou mA; potência ativa: W ou kW. DP ausente ou formato composto/raw exige adaptação específica ao produto, sem adivinhar a conversão. O monitor rejeita corrente sem conversão conhecida. Potência indisponível permite contar tempo, mas não inventa kWh.
 
+Para o EARU com `phase_a` em Base64 de 8 bytes, a corrente é extraída dos bytes 2–4 (índices iniciando em zero), em big-endian, e convertida de mA para A. Esse campo é usado automaticamente quando os DPs escalares conhecidos não estão disponíveis. `leakage_current` não é escolhido automaticamente como corrente do circuito. Frames vazios, inválidos ou de outro tamanho são rejeitados. A potência desse frame permanece indisponível até confirmar a escala do modelo.
+
 Documentação das unidades e escalas: https://developer.tuya.com/en/docs/iot/product-function-definition?id=K9tp14pijmeyh
 
 Uma ocorrência começa com a primeira amostra estritamente acima do limite e termina na primeira amostra menor ou igual. Tempo e kWh são estimados pela amostragem: a potência da amostra anterior é integrada até a próxima (`W × segundos / 3600000`). Não se utiliza tensão × corrente como se fosse potência ativa. A tela mostra segundos efetivamente processados; não avança o relógio sem amostras.
