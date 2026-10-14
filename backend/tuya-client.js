@@ -164,6 +164,7 @@ async function readEnergyKwh(deviceId, options = {}) {
 }
 
 module.exports = {
+  readStatusLogs,
   readEnergyAt,
   readEnergyLogs,
   getDeviceInfo: async deviceId => (await request('GET', `/v1.0/iot-03/devices/${encodeURIComponent(deviceId)}`)).result || {},
@@ -172,6 +173,27 @@ module.exports = {
   getDeviceSpecification,
   readEnergyKwh
 };
+
+async function readStatusLogs(deviceId, start, end, codes) {
+  let cursor = '';
+  const logs = new Map();
+  for (let page = 0; page < 100; page++) {
+    const query = new URLSearchParams({ codes: codes.join(','), start_time: String(+start), end_time: String(+end), size: '100' });
+    if (cursor) query.set('last_row_key', cursor);
+    const data = await request('GET', `/v1.0/iot-03/devices/${encodeURIComponent(deviceId)}/report-logs?${query}`);
+    const result = data.result || {};
+    for (const log of result.list || result.logs || []) {
+      const timestamp = Number(log.event_time);
+      if (codes.includes(log.code) && Number.isFinite(timestamp) && timestamp >= +start && timestamp <= +end) {
+        logs.set(`${timestamp}:${log.code}`, { ...log, timestamp });
+      }
+    }
+    if (!(result.has_more || result.has_next)) return [...logs.values()].sort((a, b) => a.timestamp - b.timestamp);
+    if (!result.last_row_key || result.last_row_key === cursor) break;
+    cursor = result.last_row_key;
+  }
+  throw new Error('Paginação dos logs de corrente incompleta. Reduza o período consultado.');
+}
 
 async function readEnergyAt(deviceId, at, options = {}) {
   const specification = await getDeviceSpecification(deviceId);

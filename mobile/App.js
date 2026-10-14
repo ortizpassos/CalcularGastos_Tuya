@@ -554,7 +554,6 @@ function DetailScreen({ name, type, names, request, onBack, onSwitchType, onOpen
 }
 
 function BathMonitorSection({ kitinete, name, request }) {
-  const [diagnostics, setDiagnostics] = useState('');
   const [config, setConfig] = useState({});
   const [status, setStatus] = useState('Carregando monitor...');
   const [message, setMessage] = useState('');
@@ -616,20 +615,15 @@ function BathMonitorSection({ kitinete, name, request }) {
     } catch (error) { setMessage(error.message); }
   };
 
-  const inspectCurrent = async () => {
-    setDiagnostics('Consultando dispositivo...');
-    try {
-      const data = await request(`/api/banhos/${kitinete}/leitura-atual?diagnostico=1`);
-      setDiagnostics(data.diagnostics ? JSON.stringify(data, null, 2) : 'Atualize o backend para consultar o diagnóstico de corrente.');
-    } catch (error) { setDiagnostics(error.message); }
-  };
-
   const loadReport = async () => {
     try {
       const start = new Date(`${reportDates[0]}T00:00:00`);
       const end = new Date(`${reportDates[1]}T00:00:00`); end.setDate(end.getDate() + 1);
       if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end <= start) throw new Error('Confira as datas.');
-      setReport(await request(`/api/banhos-relatorio?kitinete=${kitinete}&inicio=${encodeURIComponent(start.toISOString())}&fim=${encodeURIComponent(end.toISOString())}`));
+      setReport(null);
+      setMessage('Consultando histórico Tuya...');
+      setReport(await request(`/api/banhos-relatorio?fonte=tuya&kitinete=${kitinete}&inicio=${encodeURIComponent(start.toISOString())}&fim=${encodeURIComponent(end.toISOString())}`));
+      setMessage('');
     } catch (error) { setMessage(error.message); }
   };
 
@@ -665,8 +659,8 @@ function BathMonitorSection({ kitinete, name, request }) {
 
   const exportReport = async () => {
     if (!report) return;
-    const rows = (report.events || []).map(item => `<tr><td>${formatDate(item.start)}</td><td>${formatDate(item.end)}</td><td>${parseNumber(item.energyKwh).toFixed(2)} kWh</td><td>${parseNumber(item.peakA).toFixed(2)} A</td></tr>`).join('');
-    try { await Print.printAsync({ html: `<html><body><h1>Relatório de banhos - ${name}</h1><table border="1" cellpadding="6"><tr><th>Início</th><th>Fim</th><th>Consumo</th><th>Pico</th></tr>${rows}</table></body></html>` }); } catch (error) { setMessage(error.message); }
+    const rows = (report.events || []).map(item => `<tr><td>${formatDate(item.start)}</td><td>${formatDate(item.end)}</td><td>${formatDuration(item.seconds)}</td><td>${item.energyKwh == null ? 'Indisponível' : `${item.energyKwh.toFixed(3)} kWh`}</td><td>${parseNumber(item.peakA).toFixed(2)} A</td></tr>`).join('');
+    try { await Print.printAsync({ html: `<html><body><h1>Relatório de banhos - ${name}</h1><table border="1" cellpadding="6"><tr><th>Início</th><th>Fim</th><th>Duração estimada</th><th>Consumo</th><th>Pico</th></tr>${rows}</table></body></html>` }); } catch (error) { setMessage(error.message); }
   };
 
   return (
@@ -680,8 +674,6 @@ function BathMonitorSection({ kitinete, name, request }) {
       <Text style={styles.statusText}>{status}</Text>
       {message ? <Text style={styles.helper}>{message}</Text> : null}
       <Button icon="refresh-outline" title="Atualizar monitor" variant="secondary" onPress={() => refresh()} />
-      <Button icon="search-outline" title="Diagnosticar corrente" variant="secondary" onPress={inspectCurrent} />
-      {diagnostics ? <Text selectable style={styles.helper}>{diagnostics}</Text> : null}
       <Text style={styles.cardTitle}>Relatório de banhos</Text>
       <Text style={styles.label}>De</Text>
       <Pressable onPress={() => setReportDatePickerIndex(0)} style={styles.datePickerField}><Ionicons name="calendar-outline" size={20} color={COLORS.blue} /><Text style={styles.datePickerText}>{reportDates[0]}</Text></Pressable>
@@ -689,7 +681,9 @@ function BathMonitorSection({ kitinete, name, request }) {
       <Pressable onPress={() => setReportDatePickerIndex(1)} style={styles.datePickerField}><Ionicons name="calendar-outline" size={20} color={COLORS.blue} /><Text style={styles.datePickerText}>{reportDates[1]}</Text></Pressable>
       {reportDatePickerIndex !== null ? <DateTimePicker value={new Date(`${reportDates[reportDatePickerIndex]}T12:00:00`)} maximumDate={new Date()} mode="date" display={Platform.OS === 'ios' ? 'spinner' : 'default'} onChange={(event, date) => handleReportDateChange(reportDatePickerIndex, event, date)} /> : null}
       <Button icon="stats-chart-outline" title="Gerar relatório" variant="secondary" onPress={loadReport} />
-      <Text style={styles.helper}>Inclui ocorrências encerradas ou interrompidas cujo início está no período selecionado. Energia calculada pela integração da potência ativa entre amostras. Sem potência disponível, o consumo aparece como parcial ou indisponível.</Text>
+      <Text style={styles.helper}>Consulta os logs Tuya usando o limite de corrente salvo. Horários e duração são estimados pelos registros disponíveis; intervalos sem dados interrompem a ocorrência. Consumo do circuito calculado pelas leituras de energia próximas ao início e ao fim. Sem leituras suficientes, o consumo fica indisponível.</Text>
+      {report?.currentLogCount === 0 ? <Text style={styles.helper}>A Tuya não retornou registros de corrente neste período.</Text> : null}
+      {report?.energyWarning ? <Text style={styles.helper}>Consumo indisponível: {report.energyWarning}</Text> : null}
       {report ? <View style={styles.reportBox}><Text style={styles.helper}>{report.events?.length || 0} ocorrências | {parseNumber(report.totalKwh).toFixed(2)} kWh conhecidos</Text><View style={styles.tableHeader}><Text style={styles.tableHeaderText}>Kitinete / morador</Text><Text style={styles.tableHeaderText}>Início</Text><Text style={styles.tableHeaderText}>Fim</Text><Text style={styles.tableHeaderText}>Duração observada</Text><Text style={styles.tableHeaderText}>Consumo estimado</Text><Text style={styles.tableHeaderText}>Custo estimado</Text><Text style={styles.tableHeaderText}>Pico (A)</Text><Text style={styles.tableHeaderText}>Limite (A)</Text><Text style={styles.tableHeaderText}>Estado</Text></View>{(report.events || []).map((item, index) => <View key={index} style={styles.tableRow}><Text style={styles.tableCell}>{name} / {name}</Text><Text style={styles.tableCell}>{formatDate(item.start)}</Text><Text style={styles.tableCell}>{formatDate(item.end)}</Text><Text style={styles.tableCell}>{formatDuration(item.seconds)}</Text><Text style={styles.tableCell}>{item.energyKwh == null ? 'Indisponível' : `${parseNumber(item.energyKwh).toFixed(2)} kWh`}</Text><Text style={styles.tableCell}>{item.cost == null ? 'Indisponível' : `R$ ${parseNumber(item.cost).toFixed(2)}`}</Text><Text style={styles.tableCell}>{parseNumber(item.peakA).toFixed(2)}</Text><Text style={styles.tableCell}>{parseNumber(item.thresholdA).toFixed(2)}</Text><Text style={styles.tableCell}>{item.status === 'concluido' ? 'Concluído' : `Interrompido: ${item.reason || 'Intervalo sem dados'}`}</Text></View>)}<Button icon="download-outline" title="Exportar relatório" variant="secondary" onPress={exportReport} /></View> : null}
       <Text style={styles.cardTitle}>Consumo por hora</Text>
       <Text style={styles.helper}>Selecione um dia para consultar as leituras históricas da Tuya. O custo usa a tarifa da última conta de luz salva.</Text>

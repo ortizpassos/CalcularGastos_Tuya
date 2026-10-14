@@ -4,6 +4,26 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const crypto = require('node:crypto');
 
+test('status logs paginate, sort, deduplicate and reject broken cursors', async () => {
+  const source = fs.readFileSync(require.resolve('./tuya-client'), 'utf8');
+  const context = vm.createContext({ module: { exports: {} }, URLSearchParams,
+    process: { env: {} }, require: name => name === './load-env' ? {} : name === 'crypto' ? crypto : {} });
+  vm.runInContext(source, context);
+  const paths = [];
+  context.mockRequest = async (method, path) => {
+    paths.push(path);
+    return { result: paths.length === 1 ? { logs: [{ code: 'phase_a', event_time: 200, value: 'second' }], has_more: true, last_row_key: 'next' }
+      : { list: [{ code: 'phase_a', event_time: 100, value: 'first' }, { code: 'phase_a', event_time: 200, value: 'second' }], has_more: false } };
+  };
+  vm.runInContext('request = mockRequest', context);
+  const logs = await vm.runInContext("readStatusLogs('device', 0, 300, ['phase_a'])", context);
+  assert.deepEqual(Array.from(logs, log => log.timestamp), [100, 200]);
+  assert.ok(paths[1].includes('last_row_key=next'));
+  context.mockRequest = async () => ({ result: { has_more: true } });
+  vm.runInContext('request = mockRequest', context);
+  await assert.rejects(vm.runInContext("readStatusLogs('device', 0, 300, ['phase_a'])", context), /incompleta/);
+});
+
 test('historical requests sign sorted parameters and send the identical URL, including pagination', async () => {
   const sent = [];
   const source = fs.readFileSync(require.resolve('./tuya-client'), 'utf8');

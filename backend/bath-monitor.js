@@ -237,7 +237,12 @@ function installRoutes(app, auth, getDb) {
       return res.status(400).json({ erro: 'Informe um período válido de até 366 dias.' });
     }
     try {
-      const events = await getDb().collection('bath_events').find({ usuario: req.usuario.email,
+      let history = null;
+      if (req.query.fonte === 'tuya') {
+        if (!req.query.kitinete) return res.status(400).json({ erro: 'Selecione a kitinete para consultar logs Tuya.' });
+        history = await require('./bath-history').historicalBaths(getDb(), req.usuario.email, req.query.kitinete, start, end);
+      }
+      const events = history ? history.events.sort((a, b) => +new Date(b.start) - +new Date(a.start)) : await getDb().collection('bath_events').find({ usuario: req.usuario.email,
         ...(req.query.kitinete ? { kitinete: req.query.kitinete } : {}),
         start: { $gte: start, $lt: end }, status: { $ne: 'ativo' } }).sort({ start: -1 }).toArray();
       const totals = {};
@@ -249,9 +254,11 @@ function installRoutes(app, auth, getDb) {
       }
       const tariff = await latestTariff(getDb(), req.usuario.email);
       res.json({ events: events.map(e => ({ ...e, cost: tariff != null && e.energySeconds > 0 ? e.energyKwh * tariff : null })),
+        source: history ? 'tuya' : 'monitor', currentLogCount: history?.currentLogCount,
+        energyWarning: history?.energyWarning,
         tariff, totals: req.query.kitinete ? { [req.query.kitinete]: totals[req.query.kitinete] } : totals,
         totalKwh: totals.maior.energyKwh + totals.menor.energyKwh });
-    } catch { res.status(500).json({ erro: 'Falha ao gerar relatório.' }); }
+    } catch (error) { res.status(500).json({ erro: `Falha ao gerar relatório: ${error.message}` }); }
   });
   app.get('/api/consumo-dia/:kitinete', auth, async (req, res) => {
     const start = new Date(req.query.inicio), end = new Date(req.query.fim);
@@ -274,4 +281,4 @@ function installRoutes(app, auth, getDb) {
   });
 }
 
-module.exports = { measurement, findMeasurement, advance, startMonitor, installRoutes, hourlyUsage, hourlyReadingUsage, accumulatedReadingUsage, latestTariff };
+module.exports = { CURRENT_CODE_HINTS, measurement, findMeasurement, advance, startMonitor, installRoutes, hourlyUsage, hourlyReadingUsage, accumulatedReadingUsage, latestTariff };

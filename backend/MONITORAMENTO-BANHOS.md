@@ -16,6 +16,10 @@ São usados `cur_current` e `cur_power` por padrão. A conversão exige unidade 
 
 Para o EARU com `phase_a` em Base64 de 8 bytes, a corrente é extraída dos bytes 2–4 (índices iniciando em zero), em big-endian, e convertida de mA para A. Esse campo é usado automaticamente quando os DPs escalares conhecidos não estão disponíveis. `leakage_current` não é escolhido automaticamente como corrente do circuito. Frames vazios, inválidos ou de outro tamanho são rejeitados. A potência desse frame permanece indisponível até confirmar a escala do modelo.
 
+O botão Gerar relatório no mobile consulta `/api/banhos-relatorio?fonte=tuya`, usando a kitinete, o período e o limite salvo. Os logs de corrente (incluindo `phase_a` no EARU) são paginados e ordenados. O relatório é calculado na consulta, sem gravar ou duplicar eventos locais. Intervalos acima de 90 segundos, leituras inválidas e ausência de confirmação de término geram eventos interrompidos. Horários e duração representam estimativas pelos registros existentes, não confirmação de uso do chuveiro.
+
+O consumo histórico usa a diferença de energia acumulada nas bordas de cada evento, com interpolação somente entre leituras separadas por até 90 segundos. Reinício do contador ou falta de leituras suficientes deixa o consumo e custo indisponíveis. O custo usa a tarifa da última conta salva. O total soma apenas consumos conhecidos. Reduza o período se a paginação exceder 100 páginas; falhas de consulta de corrente são apresentadas como erro, não como ausência de banhos. Logs de corrente vazios são informados na tela. A disponibilidade dos logs depende da Tuya e das permissões da conta.
+
 Documentação das unidades e escalas: https://developer.tuya.com/en/docs/iot/product-function-definition?id=K9tp14pijmeyh
 
 Uma ocorrência começa com a primeira amostra estritamente acima do limite e termina na primeira amostra menor ou igual. Tempo e kWh são estimados pela amostragem: a potência da amostra anterior é integrada até a próxima (`W × segundos / 3600000`). Não se utiliza tensão × corrente como se fosse potência ativa. A tela mostra segundos efetivamente processados; não avança o relógio sem amostras.
